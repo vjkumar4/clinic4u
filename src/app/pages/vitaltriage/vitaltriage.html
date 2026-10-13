@@ -1,0 +1,149 @@
+<div class="vt">
+  <header class="vt__head">
+    <div>
+      <span class="eyebrow">Clinical · OPD</span>
+      <h1>Vitals &amp; Triage</h1>
+      <p>Record vitals, set triage priority and move patients through the OPD queue.</p>
+    </div>
+    <button class="btn" (click)="reset()">⟳ Refresh</button>
+  </header>
+
+  <section class="stats">
+    <button class="stat stat--all" [class.on]="!statusFilter()" (click)="setFilter('status', '')">
+      <span class="muted">Total patients</span><b>{{ patients().length }}</b>
+    </button>
+    @for (s of statuses; track s) {
+      <button class="stat" [attr.data-tone]="statusClass(s)" [class.on]="statusFilter() === s" (click)="toggleStatus(s)">
+        <span class="muted">{{ s }}</span><b>{{ counts()[s] }}</b>
+      </button>
+    }
+  </section>
+
+  <section class="card">
+    <div class="filters">
+      <input type="search" placeholder="Search name, MRN or token" [ngModel]="search()" (ngModelChange)="setFilter('search', $event)">
+      <select [ngModel]="doctorFilter()" (ngModelChange)="setFilter('doctor', $event)">
+        <option value="">All doctors</option>
+        @for (d of doctors(); track d) { <option [value]="d">{{ d }}</option> }
+      </select>
+      <select [ngModel]="statusFilter()" (ngModelChange)="setFilter('status', $event)">
+        <option value="">All status</option>
+        @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+      </select>
+    </div>
+
+    @if (error()) {
+      <div class="state"><h2>Couldn't load the queue</h2><p class="muted">{{ error() }}</p><button class="btn btn--primary" (click)="load()">Retry</button></div>
+    } @else if (loading()) {
+      @for (i of [1,2,3,4,5]; track i) { <div class="skel"></div> }
+    } @else {
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Patient</th><th>Doctor</th><th>Priority</th><th>Status</th><th>Vitals</th><th class="r">Action</th></tr></thead>
+          <tbody>
+            @for (p of pageItems(); track p.id) {
+              <tr [class.row-wait]="p.status === 'Waiting for Vitals'">
+                <td>
+                  <div class="who">
+                    <i class="av">{{ initials(p.name) }}</i>
+                    <div><b>{{ p.name }}</b><small class="muted"><span class="tok">{{ p.token }}</span> {{ p.mrn }} · {{ p.age }}/{{ p.sex }}</small></div>
+                  </div>
+                </td>
+                <td>{{ p.doctor }}<small class="muted">{{ p.specialty }}</small></td>
+                <td>
+                  @if (p.vitals) { <span class="prio" [class]="'prio ' + p.vitals.priority"><b></b>{{ p.vitals.priority }}</span> }
+                  @else { <span class="muted">Not assessed</span> }
+                </td>
+                <td><span class="pill" [class]="'pill ' + statusClass(p.status)"><b></b>{{ p.status }}</span></td>
+                <td>
+                  @if (p.vitals) { <span class="vit">♡ {{ bp(p) }}<small class="muted">HR {{ p.vitals.pulse }} · SpO₂ {{ p.vitals.spo2 }}%</small></span> }
+                  @else { <span class="muted">--</span> }
+                </td>
+                <td class="r">
+                  <div class="acts">
+                    @if (p.status !== 'Waiting for Vitals' && p.status !== 'Completed') { <button class="btn btn--ghost" (click)="open(p)">View</button> }
+                    <button class="btn" [class.btn--primary]="p.status !== 'Completed'" [disabled]="busyId() === p.id" (click)="primaryAction(p)">
+                      {{ busyId() === p.id ? 'Updating…' : actionLabel(p) }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="empty">No patients match your filters.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="muted">Showing {{ from() }}–{{ to() }} of {{ filtered().length }} patients</span>
+        <span>
+          <button class="pg" [disabled]="page() === 1" (click)="page.set(page() - 1)">‹</button>
+          @for (n of pages(); track n) { <button class="pg" [class.on]="n === page()" (click)="page.set(n)">{{ n }}</button> }
+          <button class="pg" [disabled]="page() === totalPages()" (click)="page.set(page() + 1)">›</button>
+        </span>
+      </div>
+    }
+  </section>
+
+  <!-- Record vitals drawer -->
+  @if (selected(); as p) {
+    <div class="overlay" (click)="close()"></div>
+    <aside class="drawer" role="dialog" aria-label="Record vitals and triage">
+      <header class="drawer__head">
+        <div><h2>Record vitals &amp; triage</h2><small>Visit OPD-2026-{{ p.mrn.slice(-3) }}</small></div>
+        <button class="x" (click)="close()" aria-label="Close">×</button>
+      </header>
+
+      <div class="drawer__body">
+        <div class="pinfo">
+          <i class="av av--lg">{{ initials(p.name) }}</i>
+          <div><b>{{ p.name }}</b><small>{{ p.mrn }} · {{ p.age }} / {{ p.sex }}</small><small>{{ p.doctor }} · {{ p.specialty }}</small></div>
+          <span class="pill" [class]="'pill ' + statusClass(p.status)"><b></b>{{ p.status }}</span>
+        </div>
+
+        <h3>Vital measurements</h3>
+        <div class="g3">
+          <div><label>Systolic (mmHg) <i>*</i></label><input type="number" [(ngModel)]="form.systolic" [class.bad]="bad(form.systolic)" placeholder="120"></div>
+          <div><label>Diastolic (mmHg) <i>*</i></label><input type="number" [(ngModel)]="form.diastolic" [class.bad]="bad(form.diastolic)" placeholder="80"></div>
+          <div><label>Pulse (bpm) <i>*</i></label><input type="number" [(ngModel)]="form.pulse" [class.bad]="bad(form.pulse)" placeholder="72"></div>
+          <div><label>Temperature (°C) <i>*</i></label><input type="number" step="0.1" [(ngModel)]="form.temperature" [class.bad]="bad(form.temperature)" placeholder="37.0"></div>
+          <div><label>SpO₂ (%) <i>*</i></label><input type="number" [(ngModel)]="form.spo2" [class.bad]="bad(form.spo2)" placeholder="98"></div>
+          <div><label>Resp. rate (/min) <i>*</i></label><input type="number" [(ngModel)]="form.respRate" [class.bad]="bad(form.respRate)" placeholder="16"></div>
+          <div><label>Weight (kg)</label><input type="number" [(ngModel)]="form.weight" placeholder="65"></div>
+          <div><label>Height (cm)</label><input type="number" [(ngModel)]="form.height" placeholder="165"></div>
+          <div class="bmi">@if (bmi(); as b) { BMI <b>{{ b }}</b> } @else { <span class="muted">BMI</span> }</div>
+        </div>
+
+        <h3>Triage assessment</h3>
+        <label>Chief complaint <i>*</i></label>
+        <textarea rows="2" [(ngModel)]="form.chiefComplaint" [class.bad]="submitted() && !form.chiefComplaint.trim()" placeholder="e.g. Fever and cold since 2 days"></textarea>
+
+        <label class="gap">Triage priority <i>*</i></label>
+        <div class="prios">
+          @for (pr of priorities; track pr) {
+            <button type="button" [class]="pr + (form.priority === pr ? ' on' : '')" (click)="form.priority = pr">{{ pr }}</button>
+          }
+        </div>
+        @if (suggested(); as s) {
+          <div class="hint">Suggested from vitals: <b [class]="s">{{ s }}</b>
+            @if (form.priority !== s) { <button type="button" class="link" (click)="form.priority = s">Apply</button> }
+          </div>
+        }
+
+        <label class="gap">Allergies / relevant notes</label>
+        <textarea rows="2" [(ngModel)]="form.allergies" placeholder="No known allergies"></textarea>
+        <label class="gap">Nursing notes</label>
+        <textarea rows="2" [(ngModel)]="form.nursingNotes" placeholder="Add any additional observations..."></textarea>
+
+        @if (formError(); as e) { <div class="err">{{ e }}</div> }
+      </div>
+
+      <footer class="drawer__foot">
+        <button class="btn" (click)="close()">Cancel</button>
+        <button class="btn btn--primary" [disabled]="saving()" (click)="save()">{{ saving() ? 'Saving…' : 'Save & send to doctor →' }}</button>
+      </footer>
+    </aside>
+  }
+
+  @if (toast(); as t) { <div class="toast" role="status">{{ t }}</div> }
+</div>

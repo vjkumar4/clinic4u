@@ -1,0 +1,123 @@
+<div class="wrap">
+
+  <header class="top">
+    <div><h1>Patients</h1><p>View, search and manage every saved patient record.</p></div>
+    <a routerLink="/patients/new" class="btn primary"><span>+</span>Add patient</a>
+  </header>
+
+  <section class="stats">
+    @for (s of stats(); track s.label; let i = $index) {
+      <article class="stat" [style.--i]="i">
+        <span class="ico" [class]="s.tone"><svg viewBox="0 0 24 24"><path [attr.d]="s.icon"/></svg></span>
+        <div><strong>{{ s.value }}</strong><small>{{ s.label }}</small></div>
+      </article>
+    }
+  </section>
+
+  <section class="card">
+
+    <div class="tools">
+      <label class="search">
+        <svg viewBox="0 0 24 24"><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3"/></svg>
+        <input type="search" placeholder="Search name, ID, phone or email" [value]="q()" (input)="setQuery($any($event.target).value)" />
+      </label>
+      <div class="chips">
+        @for (g of genders; track g) { <button type="button" [class.on]="gender() === g" (click)="setGender(g)">{{ g }}</button> }
+      </div>
+      <select class="sort" [value]="sort()" (change)="sort.set($any($event.target).value)" aria-label="Sort patients">
+        <option value="recent">Newest first</option><option value="name">Name A–Z</option><option value="age">Oldest first</option>
+      </select>
+    </div>
+
+    @if (!all().length) {
+      <div class="empty">
+        <span>+</span><h3>No patients saved yet</h3>
+        <p>Add your first patient, or load a few sample records to preview this page.</p>
+        <div class="empty-actions">
+          <a routerLink="/patients/new" class="btn primary">Add patient</a>
+          <button type="button" class="btn ghost" (click)="store.loadSamples()">Load sample data</button>
+        </div>
+      </div>
+    } @else if (!filtered().length) {
+      <div class="empty"><span>?</span><h3>No matching patients</h3><p>Try a different search or clear the filter.</p></div>
+    } @else {
+      <div class="row head" aria-hidden="true">
+        <span>Patient</span><span>Age / Gender</span><span class="c-contact">Contact</span><span>Blood</span><span class="c-cond">Conditions</span><span class="c-added">Added</span><span></span>
+      </div>
+
+      @for (p of paged(); track p.id; let i = $index) {
+        <div class="row item" tabindex="0" [style.--i]="i" (click)="selected.set(p)" (keydown.enter)="selected.set(p)">
+          <div class="who">
+            <span class="avatar" [class]="'avatar ' + tone(p)">{{ initials(p) }}</span>
+            <div><strong>{{ name(p) }}</strong><small>{{ p.id }}</small></div>
+          </div>
+          <div><strong>{{ age(p) ?? '—' }}</strong><small>{{ p.gender || '—' }}</small></div>
+          <div class="c-contact"><strong>{{ p.phone }}</strong><small>{{ p.email || '—' }}</small></div>
+          <div>@if (p.bloodGroup) { <span class="blood">{{ p.bloodGroup }}</span> } @else { — }</div>
+          <div class="c-cond tags">
+            @for (c of p.conditions.slice(0, 2); track c) { <span class="tag">{{ c }}</span> }
+            @if (p.conditions.length > 2) { <span class="tag more">+{{ p.conditions.length - 2 }}</span> }
+            @if (!p.conditions.length) { <small>None</small> }
+          </div>
+          <div class="c-added"><small>{{ fmt(p.createdAt) }}</small></div>
+          <div class="act">
+            <button type="button" class="icon del" aria-label="Delete patient" (click)="$event.stopPropagation(); confirm.set(p)">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+            </button>
+          </div>
+        </div>
+      }
+
+      <footer class="pager">
+        <small>Showing {{ (cur() - 1) * size + 1 }}–{{ last() }} of {{ filtered().length }}</small>
+        @if (pages() > 1) {
+          <div>
+            <button type="button" [disabled]="cur() === 1" (click)="page.set(cur() - 1)" aria-label="Previous page">‹</button>
+            @for (n of pageList(); track n) { <button type="button" [class.on]="n === cur()" (click)="page.set(n)">{{ n }}</button> }
+            <button type="button" [disabled]="cur() === pages()" (click)="page.set(cur() + 1)" aria-label="Next page">›</button>
+          </div>
+        }
+      </footer>
+    }
+  </section>
+</div>
+
+<!-- Details drawer -->
+@if (selected(); as p) {
+  <div class="scrim" (click)="selected.set(null)"></div>
+  <aside class="drawer" role="dialog" aria-label="Patient details">
+    <header>
+      <span [class]="'avatar big ' + tone(p)">{{ initials(p) }}</span>
+      <div><h2>{{ name(p) }}</h2><p>{{ p.id }} · {{ age(p) ?? '—' }} yrs · {{ p.gender || '—' }}</p></div>
+      <button type="button" class="icon" (click)="selected.set(null)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="body">
+      <section><h4>Allergies</h4><div class="tags">
+        @for (a of p.allergies; track a) { <span class="tag red">{{ a }}</span> } @empty { <small>None recorded</small> }
+      </div></section>
+      <section><h4>Conditions</h4><div class="tags">
+        @for (c of p.conditions; track c) { <span class="tag">{{ c }}</span> } @empty { <small>None recorded</small> }
+      </div></section>
+      @for (s of sections(p); track s.title) {
+        <section><h4>{{ s.title }}</h4>
+          <dl>@for (r of s.rows; track r[0]) { <div><dt>{{ r[0] }}</dt><dd>{{ r[1] || '—' }}</dd></div> }</dl>
+        </section>
+      }
+      <small class="meta">Added on {{ fmt(p.createdAt) }}</small>
+    </div>
+    <footer><button type="button" class="btn danger" (click)="confirm.set(p)">Delete patient</button></footer>
+  </aside>
+}
+
+<!-- Delete confirmation -->
+@if (confirm(); as p) {
+  <div class="scrim front" (click)="confirm.set(null)"></div>
+  <div class="modal" role="alertdialog" aria-label="Confirm delete">
+    <h3>Delete {{ name(p) }}?</h3>
+    <p>This removes the record permanently. This action can't be undone.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" (click)="confirm.set(null)">Cancel</button>
+      <button type="button" class="btn danger solid" (click)="remove()">Delete</button>
+    </div>
+  </div>
+}

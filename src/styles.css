@@ -1,1 +1,9 @@
-/* You can add global styles to this file, and also import other style files */
+@import "@fontsource-variable/manrope";
+@import "tailwindcss";
+
+
+
+/* every routed page fades up when you navigate */
+router-outlet + * { display: block; animation: pageIn .45s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(14px); } }
+@media (prefers-reduced-motion: reduce) { router-outlet + * { animation: none; } }

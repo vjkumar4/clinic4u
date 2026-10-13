@@ -1,0 +1,99 @@
+<div class="shell" [class.collapsed]="collapsed()" [class.open]="open()">
+
+  <!-- ============ SIDE MENU ============ -->
+  <aside class="side" aria-label="Main menu">
+    <div class="brand-row">
+      <a class="brand" routerLink="/dashboard" aria-label="clinic4u home">
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='262 257 740 740'%3E%3Cdefs%3E%3ClinearGradient id='cross' gradientUnits='userSpaceOnUse' x1='290' y1='912' x2='718' y2='295'%3E%3Cstop offset='0' stop-color='%230468c8'/%3E%3Cstop offset='.55' stop-color='%231590a0'/%3E%3Cstop offset='1' stop-color='%2333ae78'/%3E%3C/linearGradient%3E%3ClinearGradient id='leaf' gradientUnits='userSpaceOnUse' x1='905' y1='470' x2='680' y2='935'%3E%3Cstop offset='0' stop-color='%2386c53f'/%3E%3Cstop offset='.55' stop-color='%233f9b52'/%3E%3Cstop offset='1' stop-color='%230a6552'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23cross)' d='M523 295H682Q718 295 718 331V520Q718 535 705 545C625 600 572 680 573 765C573 835 600 885 630 912H523Q487 912 487 876V736Q487 720 471 720H327Q290 720 290 684V524Q290 487 327 487H471Q487 487 487 471V331Q487 295 523 295Z'/%3E%3Cpath fill='url(%23leaf)' d='M945 432C975 530 972 630 940 710C905 800 840 855 765 890C720 912 680 925 663 958C664 783 775 650 845 598C745 650 655 770 630 868C598 815 595 735 628 682C665 620 730 575 805 535C860 506 915 470 945 432Z'/%3E%3C/svg%3E">
+        <span class="brand-name">clinic<b>4u</b></span>
+      </a>
+      <button class="collapse" type="button" (click)="collapsed.set(!collapsed())"
+              [attr.aria-label]="collapsed() ? 'Expand menu' : 'Collapse menu'">
+        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+
+   <nav class="nav">
+  @for (n of nav; track n.path; let i = $index) {
+    @if (n.children) {
+      <div class="group" [class.open]="isOpen(n)" [style.--i]="i">
+        <button type="button" class="parent" [class.active]="isActive(n)" (click)="toggle(n)"
+                [title]="n.label" [attr.aria-expanded]="isOpen(n)">
+          <svg viewBox="0 0 24 24"><path [attr.d]="n.icon"/></svg>
+          <span class="label">{{ n.label }}</span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div class="sub"><div class="sub-in">
+          @for (c of n.children; track c.path) {
+            <a [routerLink]="c.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+              <i class="bul"></i><span class="label">{{ c.label }}</span>
+            </a>
+          }
+        </div></div>
+      </div>
+    } @else {
+      <a [routerLink]="n.path" routerLinkActive="active" [title]="n.label" [style.--i]="i"
+   (click)="openGroup.set(null)">
+        <svg viewBox="0 0 24 24"><path [attr.d]="n.icon"/></svg>
+        <span class="label">{{ n.label }}</span>
+      </a>
+    }
+  }
+</nav>
+
+    <button class="signout" type="button" (click)="auth.logout()" title="Sign out">
+      <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span class="label">Sign out</span>
+    </button>
+  </aside>
+
+  <div class="scrim" (click)="open.set(false)"></div>
+
+  <div class="main">
+
+    <!-- ============ HEADER ============ -->
+    <header class="top">
+      <button class="icon-btn burger" type="button" (click)="open.set(true)" aria-label="Open menu">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+
+      <div class="hello">
+        <h1>{{ greeting }}, {{ name() }}</h1>
+        <small>Here is what's happening at your clinic today.</small>
+      </div>
+
+      <label class="search">
+        <svg viewBox="0 0 24 24"><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3"/></svg>
+        <input type="search" placeholder="Search patients, visits..." />
+      </label>
+
+      <button class="icon-btn bell" type="button" aria-label="Notifications">
+        <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <i class="dot"></i>
+      </button>
+
+      <div class="user">
+        <button class="avatar" type="button" (click)="$event.stopPropagation(); menuOpen.set(!menuOpen())"
+                aria-haspopup="menu" [attr.aria-expanded]="menuOpen()">{{ initial() }}</button>
+        @if (menuOpen()) {
+          <div class="menu" role="menu" (click)="$event.stopPropagation()">
+            <p><strong>{{ name() }}</strong><small>{{ auth.user()?.email }}</small></p>
+            <a routerLink="/settings" role="menuitem" (click)="menuOpen.set(false)">Settings</a>
+            <button type="button" role="menuitem" (click)="auth.logout()">Sign out</button>
+          </div>
+        }
+      </div>
+    </header>
+
+    <!-- ============ PAGE CONTENT ============ -->
+    <main class="content"><router-outlet /></main>
+
+    <!-- ============ FOOTER ============ -->
+    <footer class="foot">
+      <span>© {{ year }} clinic4u. All rights reserved.</span>
+      <span class="secure"><i></i>Secure healthcare management</span>
+      <nav><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Support</a></nav>
+    </footer>
+
+  </div>
+</div>

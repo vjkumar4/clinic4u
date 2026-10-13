@@ -1,0 +1,148 @@
+<div class="ap">
+  <header class="ap__head">
+    <div>
+      <span class="eyebrow">Front desk</span>
+      <h1>Appointments</h1>
+      <p>Book visits, confirm patients and check them in to the OPD queue.</p>
+    </div>
+    <button class="btn btn--primary btn--lg" (click)="openNew()">＋ New appointment</button>
+  </header>
+
+  <!-- week strip -->
+  <section class="week card">
+    <div class="week__top">
+      <div><b>{{ monthLabel() }}</b><small class="muted">{{ dateLabel() }}</small></div>
+      <div class="week__nav">
+        <button class="btn btn--sm" (click)="goToday()">Today</button>
+        <button class="nav" (click)="shiftWeek(-1)" aria-label="Previous week">‹</button>
+        <button class="nav" (click)="shiftWeek(1)" aria-label="Next week">›</button>
+      </div>
+    </div>
+    <div class="days">
+      @for (d of week(); track d.key) {
+        <button class="day" [class.on]="d.key === selectedDate()" [class.today]="d.key === todayIso" (click)="selectedDate.set(d.key)">
+          <span>{{ d.dow }}</span><b>{{ d.num }}</b>
+          <em>{{ d.count }} {{ d.count === 1 ? 'visit' : 'visits' }}</em>
+        </button>
+      }
+    </div>
+  </section>
+
+  <section class="kpis">
+    @for (k of kpis(); track k.label) {
+      <div class="kpi" [attr.data-tone]="k.tone"><span class="muted">{{ k.label }}</span><b>{{ k.value }}</b></div>
+    }
+  </section>
+
+  <section class="card">
+    <div class="filters">
+      <input type="search" placeholder="Search patient, MRN or phone" [ngModel]="search()" (ngModelChange)="search.set($event)">
+      <select [ngModel]="doctorFilter()" (ngModelChange)="doctorFilter.set($event)">
+        <option value="">All doctors</option>
+        @for (d of doctors(); track d.name) { <option [value]="d.name">{{ d.name }}</option> }
+      </select>
+      <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <option value="">All status</option>
+        @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+      </select>
+    </div>
+
+    @if (error()) {
+      <div class="state"><h2>Couldn't load appointments</h2><p class="muted">{{ error() }}</p><button class="btn btn--primary" (click)="load()">Retry</button></div>
+    } @else if (loading()) {
+      @for (i of [1,2,3,4]; track i) { <div class="skel"></div> }
+    } @else {
+      @for (g of groups(); track g.label) {
+        <h3 class="grp">{{ g.label }} <span>{{ g.items.length }}</span></h3>
+        @for (a of g.items; track a.id) {
+          <article class="appt" [class.dim]="a.status === 'Cancelled' || a.status === 'No-show'" [style.--dc]="doctorColor(a.doctor)">
+            <div class="appt__time"><b>{{ time12(a.time) }}</b><small class="muted">{{ a.type }}</small></div>
+            <div class="appt__main">
+              <i class="av">{{ initials(a.patient.name) }}</i>
+              <div class="appt__info">
+                <b>{{ a.patient.name }}</b>
+                <small class="muted">{{ a.patient.mrn }} · {{ a.patient.age }}/{{ a.patient.sex }} · {{ a.patient.phone }}</small>
+                <span class="reason">{{ a.reason }}</span>
+              </div>
+              <div class="appt__doc"><span class="dot"></span><div><b>{{ a.doctor }}</b><small class="muted">{{ a.specialty }}</small></div></div>
+            </div>
+            <div class="appt__side">
+              <span class="pill" [class]="'pill ' + statusClass(a.status)"><b></b>{{ a.status }}</span>
+              <div class="acts">
+                @switch (a.status) {
+                  @case ('Scheduled') {
+                    <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Confirmed')">Confirm</button>
+                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Cancelled')">Cancel</button>
+                  }
+                  @case ('Confirmed') {
+                    <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="checkIn(a)">{{ busyId() === a.id ? 'Checking in…' : 'Check in' }}</button>
+                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'No-show')">No-show</button>
+                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Cancelled')">Cancel</button>
+                  }
+                  @case ('Checked-in') { <span class="token">Token {{ a.token }} · in queue</span> }
+                  @case ('Completed') { @if (a.token) { <span class="token token--done">Token {{ a.token }}</span> } }
+                }
+              </div>
+            </div>
+          </article>
+        }
+      } @empty {
+        <div class="empty">
+          <div class="empty__ic">📅</div>
+          <b>No appointments for {{ dateLabel() }}</b>
+          <p class="muted">Try another day or clear the filters.</p>
+          <button class="btn btn--primary" (click)="openNew()">Book an appointment</button>
+        </div>
+      }
+    }
+  </section>
+
+  <!-- new appointment drawer -->
+  @if (drawer()) {
+    <div class="overlay" (click)="closeNew()"></div>
+    <aside class="drawer" role="dialog" aria-label="New appointment">
+      <header class="drawer__head"><div><h2>New appointment</h2><small>Book a visit for a patient</small></div><button class="x" (click)="closeNew()" aria-label="Close">×</button></header>
+      <div class="drawer__body">
+        <h4>Patient</h4>
+        <label>Full name <i>*</i></label>
+        <input [(ngModel)]="form.patientName" [class.bad]="bad(form.patientName.trim())" placeholder="Patient name">
+        <div class="g3">
+          <div><label>Phone <i>*</i></label><input [(ngModel)]="form.phone" [class.bad]="bad(form.phone.trim())" placeholder="+91 …"></div>
+          <div><label>Age</label><input type="number" [(ngModel)]="form.age" placeholder="34"></div>
+          <div><label>Sex</label><select [(ngModel)]="form.sex"><option value="F">Female</option><option value="M">Male</option></select></div>
+        </div>
+
+        <h4>Visit</h4>
+        <div class="seg">
+          @for (t of ['New', 'Follow-up']; track t) { <button type="button" [class.on]="form.type === t" (click)="form.type = $any(t)">{{ t }}</button> }
+        </div>
+        <div class="g2">
+          <div><label>Doctor <i>*</i></label>
+            <select [(ngModel)]="form.doctor" [class.bad]="bad(form.doctor)">
+              <option value="">Select doctor</option>
+              @for (d of doctors(); track d.name) { <option [value]="d.name">{{ d.name }} · {{ d.specialty }}</option> }
+            </select></div>
+          <div><label>Date <i>*</i></label><input type="date" [min]="todayIso" [(ngModel)]="form.date"></div>
+        </div>
+        <label class="gap">Time slot <i>*</i></label>
+        @if (!form.doctor) { <div class="hint">Choose a doctor to see available slots.</div> }
+        @else {
+          <div class="slots">
+            @for (s of slots; track s) {
+              <button type="button" class="slot" [class.on]="form.time === s" [disabled]="slotTaken(s)" (click)="form.time = s">{{ time12(s) }}</button>
+            }
+          </div>
+        }
+        <label class="gap">Reason for visit</label>
+        <textarea rows="2" [(ngModel)]="form.reason" placeholder="e.g. Fever and cold since 2 days"></textarea>
+        @if (formError(); as e) { <div class="err">{{ e }}</div> }
+      </div>
+      <footer class="drawer__foot">
+        <button class="btn" (click)="closeNew()">Cancel</button>
+        <button class="btn btn--primary" [disabled]="saving()" (click)="save()">{{ saving() ? 'Booking…' : 'Book appointment' }}</button>
+      </footer>
+    </aside>
+  }
+
+  @if (toast(); as t) { <div class="toast" role="status">{{ t }}</div> }
+</div>

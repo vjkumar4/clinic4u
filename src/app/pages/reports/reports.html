@@ -1,0 +1,192 @@
+<div class="rp">
+  <header class="rp__head">
+    <div>
+      <span class="eyebrow">Green Valley Clinic</span>
+      <h1>Reports</h1>
+      <p>Clinic performance, patient statistics and revenue at a glance.</p>
+    </div>
+    <div class="rp__tools">
+      <div class="seg" role="group" aria-label="Date range">
+        @for (r of ranges; track r.key) {
+          <button [class.on]="range() === r.key" (click)="range.set(r.key)">{{ r.label }}</button>
+        }
+      </div>
+      @if (data(); as d) { <span class="chip">{{ d.rangeLabel }}</span> }
+      <button class="btn btn--primary" (click)="exportCsv()">Export CSV</button>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Report sections">
+    @for (t of tabs; track t) {
+      <button [class.on]="t === activeTab()" (click)="activeTab.set(t)">{{ t }}</button>
+    }
+  </nav>
+
+  @if (error()) {
+    <div class="card state">
+      <h2>Couldn't load reports</h2>
+      <p class="muted">Check your connection and try again.</p>
+      <button class="btn btn--primary" (click)="retry()">Retry</button>
+    </div>
+  } @else if (loading() && !data()) {
+    <div class="kpis">
+      @for (i of [1,2,3,4]; track i) { <div class="card skel" style="height:116px"></div> }
+    </div>
+    <div class="card skel" style="height:300px"></div>
+  } @else if (data(); as d) {
+    <div class="fade" [class.dim]="loading()">
+
+      <section class="kpis">
+        @for (k of d.kpis; track k.key) {
+          <article class="card kpi" [attr.data-tone]="k.tone">
+            <div class="kpi__top">
+              <span class="muted">{{ k.label }}</span>
+              <span class="delta" [class.good]="isGood(k)" [class.bad]="!isGood(k)">
+                {{ k.change > 0 ? '▲' : '▼' }} {{ k.change < 0 ? -k.change : k.change }}%
+              </span>
+            </div>
+            <div class="kpi__val">{{ k.value }}</div>
+            <div class="kpi__foot">
+              <small class="muted">vs. previous period</small>
+              <svg class="spark" viewBox="0 0 96 32" aria-hidden="true"><path [attr.d]="sparkPath(k.spark)"/></svg>
+            </div>
+          </article>
+        }
+      </section>
+
+      <section class="row row--wide">
+        <article class="card">
+          <div class="card__head">
+            <div><h2>Patient visits trend</h2><small class="muted">Daily visits</small></div>
+            <select [ngModel]="doctorFilter()" (ngModelChange)="doctorFilter.set($event)">
+              <option value="">All doctors</option>
+              @for (doc of d.doctors; track doc.name) { <option [value]="doc.name">{{ doc.name }}</option> }
+            </select>
+          </div>
+          <svg class="trend" [attr.viewBox]="'0 0 ' + W + ' ' + H" role="img" aria-label="Patient visits trend">
+            <defs>
+              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="var(--brand)" stop-opacity=".35"/>
+                <stop offset="1" stop-color="var(--brand)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            @for (t of yAxis(); track t) {
+              <line [attr.x1]="L" [attr.x2]="W - 10" [attr.y1]="y(t)" [attr.y2]="y(t)" class="gl"/>
+              <text [attr.x]="L - 8" [attr.y]="y(t) + 4" class="ax" text-anchor="end">{{ t }}</text>
+            }
+            <path [attr.d]="areaPath()" fill="url(#areaGrad)"/>
+            <path [attr.d]="linePath()" class="ln"/>
+            @for (v of series(); track $index) {
+              <g (mouseenter)="hover.set($index)" (mouseleave)="hover.set(null)">
+                <rect [attr.x]="x($index) - 22" [attr.y]="T" width="44" [attr.height]="H - T - B" fill="transparent"/>
+                @if (hover() === $index) { <line [attr.x1]="x($index)" [attr.x2]="x($index)" [attr.y1]="T" [attr.y2]="y(0)" class="cross"/> }
+                <circle [attr.cx]="x($index)" [attr.cy]="y(v)" [attr.r]="hover() === $index ? 6 : 3.5" class="pt"/>
+                <text [attr.x]="x($index)" [attr.y]="H - 7" class="ax" text-anchor="middle">{{ d.trend.labels[$index] }}</text>
+              </g>
+            }
+            @if (hover() !== null) {
+              <g [attr.transform]="'translate(' + (x(hover()!) - 46) + ',' + (y(series()[hover()!]) - 50) + ')'">
+                <rect width="92" height="38" rx="8" class="tip"/>
+                <text x="46" y="16" class="tt" text-anchor="middle">{{ d.trend.labels[hover()!] }} 2026</text>
+                <text x="46" y="31" class="tt b" text-anchor="middle">{{ series()[hover()!] }} visits</text>
+              </g>
+            }
+          </svg>
+        </article>
+
+        <article class="card">
+          <div class="card__head"><div><h2>Visits by doctor</h2><small class="muted">Share of total visits</small></div></div>
+          <div class="donutrow">
+            <svg viewBox="0 0 180 180" class="donut" role="img" aria-label="Visits by doctor">
+              <circle cx="90" cy="90" r="70" fill="none" stroke-width="24" class="track"/>
+              @for (a of doctorArcs(); track a.label) {
+                <circle cx="90" cy="90" r="70" fill="none" [attr.stroke-width]="hoverDoctor() === a.label ? 30 : 24" stroke-linecap="butt"
+                        [attr.stroke]="a.color" [attr.stroke-dasharray]="a.dash" [attr.stroke-dashoffset]="a.offset" transform="rotate(-90 90 90)"
+                        (mouseenter)="hoverDoctor.set(a.label)" (mouseleave)="hoverDoctor.set(null)"/>
+              }
+              <text x="90" y="88" text-anchor="middle" class="big">{{ totalVisits() }}</text>
+              <text x="90" y="106" text-anchor="middle" class="sm">Total visits</text>
+            </svg>
+            <ul class="legend">
+              @for (doc of d.doctors; track doc.name) {
+                <li [class.act]="hoverDoctor() === doc.name" (mouseenter)="hoverDoctor.set(doc.name)" (mouseleave)="hoverDoctor.set(null)">
+                  <i [style.background]="doc.color"></i>
+                  <span>{{ doc.name }}<small class="muted">{{ doc.specialty }}</small></span>
+                  <em>{{ doc.visits }} · {{ pct(doc.visits, totalVisits()) }}%</em>
+                </li>
+              }
+            </ul>
+          </div>
+        </article>
+      </section>
+
+      <section class="row row--even">
+        <article class="card">
+          <div class="card__head"><div><h2>Patient demographics</h2><small class="muted">Gender and age group</small></div></div>
+          <div class="demo">
+            <div class="demo__donut">
+              <svg viewBox="0 0 140 140" class="donut donut--sm" role="img" aria-label="Gender split">
+                <circle cx="70" cy="70" r="52" fill="none" stroke-width="18" class="track"/>
+                @for (a of genderArcs(); track a.label) {
+                  <circle cx="70" cy="70" r="52" fill="none" stroke-width="18" [attr.stroke]="a.color"
+                          [attr.stroke-dasharray]="a.dash" [attr.stroke-dashoffset]="a.offset" transform="rotate(-90 70 70)"/>
+                }
+                <text x="70" y="68" text-anchor="middle" class="big">{{ totalGender() }}</text>
+                <text x="70" y="85" text-anchor="middle" class="sm">Patients</text>
+              </svg>
+              <ul class="gender">
+                @for (g of d.gender; track g.label) {
+                  <li><i [style.background]="g.color"></i><span class="muted">{{ g.label }}</span><b>{{ g.count }} ({{ pct(g.count, totalGender()) }}%)</b></li>
+                }
+              </ul>
+            </div>
+            <div class="ages">
+              @for (a of d.ageGroups; track a.label) {
+                <div class="age">
+                  <span>{{ a.label }}</span>
+                  <div class="bar"><div [style.width.%]="(a.count / maxAge()) * 100"></div></div>
+                  <em>{{ a.count }} · {{ pct(a.count, totalGender()) }}%</em>
+                </div>
+              }
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card__head"><div><h2>Top consultation reasons</h2><small class="muted">By number of visits</small></div></div>
+          <ul class="reasons">
+            @for (r of d.reasons; track r.label) {
+              <li>
+                <div class="reasons__top"><span><i [style.background]="r.color"></i>{{ r.label }}</span><em>{{ r.count }} · {{ pct(r.count, totalReasons()) }}%</em></div>
+                <div class="bar bar--thin"><div [style.width.%]="pct(r.count, totalReasons()) * 2.4" [style.background]="r.color"></div></div>
+              </li>
+            }
+          </ul>
+        </article>
+      </section>
+
+      <article class="card">
+        <div class="card__head">
+          <div><h2>Recent patient visits</h2><small class="muted">Latest activity today</small></div>
+          <input class="searchbox" type="search" placeholder="Search patient, MRN, doctor" [ngModel]="search()" (ngModelChange)="search.set($event)">
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Patient</th><th>MRN</th><th>Doctor</th><th>Reason</th><th>Date and time</th><th>Status</th></tr></thead>
+            <tbody>
+              @for (v of filteredVisits(); track v.mrn) {
+                <tr>
+                  <td><span class="who"><i class="av">{{ initials(v.patient) }}</i>{{ v.patient }}</span></td>
+                  <td class="muted">{{ v.mrn }}</td><td>{{ v.doctor }}</td><td>{{ v.reason }}</td><td class="muted">{{ v.at }}</td>
+                  <td><span class="pill" [class]="'pill ' + statusClass(v.status)"><b></b>{{ v.status }}</span></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="empty">No visits match your search.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  }
+</div>

@@ -1,0 +1,132 @@
+<div class="wrap">
+
+@if (done()) {
+  <section class="card success">
+    <svg class="tick" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l8 8 14-16"/></svg>
+    <h2>Patient added</h2>
+    <p><strong>{{ fullName() }}</strong> has been registered with ID <b class="pid">{{ patientId() }}</b>.</p>
+    <div class="actions center">
+      <button type="button" class="btn ghost" (click)="reset()">Add another</button>
+      <a routerLink="/patients" class="btn primary">View patients <i>→</i></a>
+    </div>
+  </section>
+} @else {
+
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+
+  <!-- Header with live preview + progress -->
+  <section class="card head">
+    <div class="avatar">{{ initials() }}</div>
+    <div class="who">
+      <h1>{{ fullName() || 'Add new patient' }}</h1>
+      <p>{{ age() !== null ? age() + ' years old · ' : '' }}{{ cur().sub }}</p>
+    </div>
+    <div class="prog">
+      <div class="prog-top"><span>Required details</span><b>{{ progress() }}%</b></div>
+      <div class="bar"><i [style.width.%]="progress()"></i></div>
+    </div>
+  </section>
+
+  <!-- Stepper -->
+  <nav class="steps" aria-label="Progress">
+    @for (s of steps; track s.group; let i = $index) {
+      <button type="button" class="step" [class.on]="i === step()" [class.done]="i < step()" [disabled]="i > step()" (click)="goTo(i)">
+        <span class="n">@if (i < step()) { ✓ } @else { {{ i + 1 }} }</span>
+        <span class="t">{{ s.label }}</span>
+      </button>
+      @if (i < steps.length - 1) { <span class="line"></span> }
+    }
+  </nav>
+
+  <!-- Active step (re-created per step so it animates in) -->
+  @for (s of [cur()]; track s.group) {
+    <section class="card panel" [class.back]="dir() < 0" [formGroupName]="s.group">
+      <h2>{{ s.title }}</h2>
+
+      <div class="grid">
+        @for (f of s.fields; track f.key; let i = $index) {
+          <div class="field" [class.span2]="f.span" [style.--i]="i">
+
+            @if (f.kind !== 'custom') {
+              <label [for]="f.key">{{ f.label }}@if (f.req) {<em>*</em>}</label>
+              <div class="control" [class.invalid]="!!err(s.group + '.' + f.key)">
+                @switch (f.kind) {
+                  @case ('select') {
+                    <select [id]="f.key" [formControlName]="f.key">
+                      <option value="">Select</option>
+                      @for (o of f.opts; track o) { <option [value]="o">{{ o }}</option> }
+                    </select>
+                  }
+                  @case ('textarea') { <textarea [id]="f.key" [formControlName]="f.key" rows="3" [placeholder]="f.ph ?? ''"></textarea> }
+                  @default {
+                    <input [id]="f.key" [type]="f.type ?? 'text'" [formControlName]="f.key" [placeholder]="f.ph ?? ''" />
+                    @if (f.unit) { <span class="unit">{{ f.unit }}</span> }
+                  }
+                }
+              </div>
+              @if (err(s.group + '.' + f.key); as m) { <span class="error">{{ m }}</span> }
+            } @else {
+              @switch (f.key) {
+                @case ('gender') {
+                  <label>Gender<em>*</em></label>
+                  <div class="seg" [class.invalid]="!!err('personal.gender')">
+                    @for (g of genders; track g) {
+                      <label class="opt"><input type="radio" formControlName="gender" [value]="g" /><span>{{ g }}</span></label>
+                    }
+                  </div>
+                  @if (err('personal.gender'); as m) { <span class="error">{{ m }}</span> }
+                }
+                @case ('bmi') {
+                  @if (bmi(); as b) {
+                    <div class="bmi">
+                      <div><small>Body mass index</small><strong>{{ b.v }}</strong></div>
+                      <div class="scale"><i [style.left.%]="b.pos"></i></div>
+                      <span class="tag">{{ b.label }}</span>
+                    </div>
+                  }
+                }
+                @case ('allergies') {
+                  <label>Allergies</label>
+                  <div class="control chips">
+                    @for (a of allergies(); track a; let x = $index) {
+                      <span class="chip red">{{ a }}<button type="button" (click)="removeAllergy(x)" [attr.aria-label]="'Remove ' + a">×</button></span>
+                    }
+                    <input #ai placeholder="Type and press Enter" (keydown.enter)="$event.preventDefault(); addAllergy(ai)" (blur)="addAllergy(ai)" />
+                  </div>
+                }
+                @case ('conditions') {
+                  <label>Existing conditions</label>
+                  <div class="tags">
+                    @for (c of conditionList; track c) {
+                      <button type="button" class="tag-btn" [class.sel]="conditions().includes(c)" (click)="toggleCondition(c)">{{ c }}</button>
+                    }
+                  </div>
+                }
+                @case ('consent') {
+                  <label class="consent" [class.invalid]="!!err('emergency.consent')">
+                    <input type="checkbox" formControlName="consent" /><i></i>
+                    <span>I confirm the patient has agreed to store and use these details for their care.</span>
+                  </label>
+                  @if (err('emergency.consent'); as m) { <span class="error">{{ m }}</span> }
+                }
+              }
+            }
+
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <div class="actions">
+    <button type="button" class="btn ghost" [style.visibility]="step() ? 'visible' : 'hidden'" (click)="back()">← Back</button>
+    <button type="submit" class="btn primary" [disabled]="loading()">
+      @if (loading()) { <span class="spin"></span>Saving... }
+      @else if (isLast()) { Save patient <i>✓</i> }
+      @else { Continue <i>→</i> }
+    </button>
+  </div>
+
+</form>
+}
+</div>

@@ -1,0 +1,137 @@
+<div class="cn">
+  @if (error()) {
+    <div class="card state"><h2>Couldn't load this consultation</h2><p class="muted">{{ error() }}</p>
+      <button class="btn btn--primary" (click)="load()">Retry</button> <a class="btn" [routerLink]="queueRoute">Back to queue</a></div>
+  } @else if (loading()) {
+    <div class="skel" style="height:96px"></div>
+    <div class="grid"><div><div class="skel" style="height:120px"></div><div class="skel" style="height:260px"></div></div><div class="skel" style="height:380px"></div></div>
+  } @else if (data(); as d) {
+    <nav class="crumb"><a [routerLink]="queueRoute">← Vitals &amp; Triage</a><span>/</span> Consultation</nav>
+
+    <header class="hero">
+      <i class="av av--xl">{{ initials(d.patient.name) }}</i>
+      <div class="hero__main">
+        <h1>{{ d.patient.name }}</h1>
+        <p>{{ d.patient.mrn }} · {{ d.patient.age }} / {{ d.patient.sex }} · {{ d.patient.phone }}</p>
+        <div class="tags">
+          <span class="tag">Token {{ d.token }}</span>
+          <span class="tag">{{ d.doctor }}</span>
+          <span class="prio" [class]="'prio ' + d.priority"><b></b>{{ d.priority }}</span>
+          <span class="pill"><b></b>In consultation</span>
+        </div>
+      </div>
+      <div class="timer"><small>Consultation time</small><b>{{ elapsed() }}</b></div>
+    </header>
+
+    <div class="grid">
+      <main>
+        <!-- vitals -->
+        <section class="card">
+          <div class="card__head"><h2>Triage vitals</h2><small class="muted">Recorded by nursing</small></div>
+          <div class="tiles">
+            @for (t of tiles(); track t.label) {
+              <div class="tile" [class]="'tile ' + t.flag">
+                <span>{{ t.label }}</span><b>{{ t.value }}<em>{{ t.unit }}</em></b>
+                @if (t.flag !== 'ok') { <i>{{ t.flag === 'high' ? 'Critical' : 'Check' }}</i> }
+              </div>
+            }
+          </div>
+          <div class="cc"><div><small class="muted">Chief complaint</small><p>{{ d.chiefComplaint }}</p></div>
+            <div><small class="muted">Nursing notes</small><p>{{ d.nursingNotes || '—' }}</p></div></div>
+        </section>
+
+        <!-- notes -->
+        <section class="card">
+          <div class="card__head"><h2>Consultation notes</h2></div>
+          <label>Symptoms &amp; history</label>
+          <textarea rows="3" [(ngModel)]="notes.symptoms" placeholder="Onset, duration, associated symptoms…"></textarea>
+          <label class="gap">Examination findings</label>
+          <textarea rows="3" [(ngModel)]="notes.examination" placeholder="General and systemic examination…"></textarea>
+          <label class="gap">Diagnosis <i>*</i></label>
+          <input [(ngModel)]="notes.diagnosis" [class.bad]="submitted() && !notes.diagnosis.trim()" placeholder="Primary diagnosis">
+          <div class="chips">
+            @for (h of diagnosisHints; track h) { <button type="button" class="chip" (click)="notes.diagnosis = h">{{ h }}</button> }
+          </div>
+        </section>
+
+        <!-- prescription -->
+        <section class="card">
+          <div class="card__head"><h2>Prescription</h2><button class="btn btn--primary btn--sm" (click)="addMedicine()">+ Add medicine</button></div>
+          <div class="chips chips--top">
+            <small class="muted">Quick add:</small>
+            @for (q of quickMeds; track q.name) { <button type="button" class="chip" (click)="addMedicine(q)">+ {{ q.name }}</button> }
+          </div>
+          @for (m of medicines; track $index) {
+            <div class="med">
+              <div class="med__grid">
+                <div class="f2"><label>Medicine</label><input [(ngModel)]="m.name" placeholder="Name" [class.bad]="hasAllergyWarning(m)"></div>
+                <div><label>Dose</label><input [(ngModel)]="m.dose" placeholder="500 mg"></div>
+                <div><label>Frequency</label>
+                  <select [(ngModel)]="m.frequency">@for (f of frequencies; track f) { <option>{{ f }}</option> }</select></div>
+                <div><label>Duration</label><input [(ngModel)]="m.duration" placeholder="5 days"></div>
+                <div class="f2"><label>Instructions</label><input [(ngModel)]="m.instructions" placeholder="After food"></div>
+              </div>
+              <button class="rm" (click)="removeMedicine($index)" aria-label="Remove medicine">×</button>
+              @if (hasAllergyWarning(m)) { <div class="medwarn">⚠ Patient is allergic to {{ d.patient.allergies }}. Review before prescribing.</div> }
+            </div>
+          } @empty {
+            <div class="empty">No medicines added yet. Use Quick add or “Add medicine”.</div>
+          }
+        </section>
+
+        <!-- investigations + follow up -->
+        <section class="card">
+          <div class="card__head"><h2>Investigations &amp; follow-up</h2></div>
+          <div class="chips">
+            @for (t of testOptions; track t) { <button type="button" class="chip" [class.on]="tests.includes(t)" (click)="toggleTest(t)">{{ tests.includes(t) ? '✓ ' : '' }}{{ t }}</button> }
+          </div>
+          <div class="two">
+            <div><label class="gap">Advice to patient</label><textarea rows="3" [(ngModel)]="notes.advice" placeholder="Rest, fluids, diet, warning signs…"></textarea></div>
+            <div><label class="gap">Follow-up date</label><input type="date" [(ngModel)]="notes.followUp"></div>
+          </div>
+        </section>
+      </main>
+
+      <aside>
+        @if (d.patient.allergies && d.patient.allergies !== 'None') {
+          <div class="alert"><b>⚠ Allergy</b><span>{{ d.patient.allergies }}</span></div>
+        }
+        <section class="card">
+          <div class="card__head"><h2>Previous visits</h2></div>
+          <ol class="tl">
+            @for (h of d.history; track h.date) {
+              <li><i></i><div><b>{{ h.diagnosis }}</b><small class="muted">{{ h.date }} · {{ h.doctor }}</small></div></li>
+            } @empty { <li class="muted">First visit.</li> }
+          </ol>
+        </section>
+        <section class="card summary">
+          <div class="card__head"><h2>This visit</h2></div>
+          <dl>
+            <dt>Diagnosis</dt><dd>{{ notes.diagnosis || '—' }}</dd>
+            <dt>Medicines</dt><dd>{{ medicines.length }}</dd>
+            <dt>Tests ordered</dt><dd>{{ tests.length }}</dd>
+            <dt>Follow-up</dt><dd>{{ notes.followUp || '—' }}</dd>
+          </dl>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="bar">
+      <a class="btn" [routerLink]="queueRoute">Back to queue</a>
+      <span class="sp"></span>
+      <button class="btn" [disabled]="saving() !== null" (click)="saveDraft()">{{ saving() === 'draft' ? 'Saving…' : 'Save draft' }}</button>
+      <button class="btn btn--primary" [disabled]="saving() !== null" (click)="askComplete()">{{ saving() === 'complete' ? 'Completing…' : 'Complete consultation ✓' }}</button>
+    </footer>
+
+    @if (confirming()) {
+      <div class="overlay" (click)="confirming.set(false)"></div>
+      <div class="modal" role="dialog" aria-label="Complete consultation">
+        <h2>Complete this consultation?</h2>
+        <p class="muted">The visit for {{ d.patient.name }} will be marked Completed and the prescription will be sent to billing/pharmacy.</p>
+        <div class="modal__sum"><span><b>{{ notes.diagnosis }}</b></span><span>{{ medicines.length }} medicine(s) · {{ tests.length }} test(s)</span></div>
+        <div class="modal__act"><button class="btn" (click)="confirming.set(false)">Keep editing</button><button class="btn btn--primary" (click)="complete()">Yes, complete</button></div>
+      </div>
+    }
+  }
+  @if (toast(); as t) { <div class="toast" role="status">{{ t }}</div> }
+</div>
