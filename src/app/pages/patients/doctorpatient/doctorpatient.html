@@ -1,0 +1,156 @@
+<div class="page">
+  <header class="head">
+    <div>
+      <h1>Patients</h1>
+      <p>{{ kpis()[0].value | number }} registered patients</p>
+    </div>
+    <button type="button" class="btn btn--primary" routerLink="/patients/new">＋ Add Patient</button>
+  </header>
+
+  <!-- KPI cards double as status filters -->
+  <section class="kpis" aria-label="Filter by status">
+    @for (k of kpis(); track k.label) {
+      <button type="button" class="kpi tone-{{ k.tone }}" [class.on]="status() === k.status || (k.status === 'All' && status() === 'All')"
+              [attr.aria-pressed]="status() === k.status" (click)="setStatus(k.status)">
+        <span class="kpi__icon" aria-hidden="true">{{ k.icon }}</span>
+        <span class="kpi__text"><b>{{ k.value | number }}</b><small>{{ k.label }}</small></span>
+      </button>
+    }
+  </section>
+
+  <!-- Toolbar -->
+  <section class="toolbar" aria-label="Search and filters">
+    <label class="search">
+      <span aria-hidden="true">🔍</span>
+      <input type="search" placeholder="Search by name, UHID, phone or condition" [value]="search()"
+             (input)="onSearch($event)" aria-label="Search patients" />
+    </label>
+    <label class="select">
+      <span>Gender</span>
+      <select (change)="onGender($event)" aria-label="Gender">
+        @for (g of genders; track g) { <option [value]="g" [selected]="gender() === g">{{ g }}</option> }
+      </select>
+    </label>
+    @if (filtersActive()) { <button type="button" class="link" (click)="reset()">Clear filters</button> }
+  </section>
+
+  @if (error()) {
+    <p class="alert" role="alert">{{ error() }} <button type="button" (click)="retry()">Try again</button></p>
+  }
+
+  <!-- Table -->
+  <section class="panel" [class.is-loading]="loading() && items().length" aria-busy="{{ loading() }}">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th [attr.aria-sort]="ariaSort('name')"><button type="button" class="sort" (click)="toggleSort('name')">
+              Patient <i [class.on]="sort() === 'name'">{{ dir() === 'asc' ? '↑' : '↓' }}</i></button></th>
+            <th [attr.aria-sort]="ariaSort('age')"><button type="button" class="sort" (click)="toggleSort('age')">
+              Age / Gender <i [class.on]="sort() === 'age'">{{ dir() === 'asc' ? '↑' : '↓' }}</i></button></th>
+            <th class="hide-md">Phone</th>
+            <th class="hide-md">Conditions</th>
+            <th [attr.aria-sort]="ariaSort('lastVisit')"><button type="button" class="sort" (click)="toggleSort('lastVisit')">
+              Last visit <i [class.on]="sort() === 'lastVisit'">{{ dir() === 'asc' ? '↑' : '↓' }}</i></button></th>
+            <th>Status</th>
+            <th><span class="sr">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (loading() && !items().length) {
+            @for (r of skeletonRows; track $index) {
+              <tr class="skel"><td colspan="7"><span class="bar"></span></td></tr>
+            }
+          } @else {
+            @for (p of items(); track p.id) {
+              <tr class="row" tabindex="0" (click)="open(p)" (keydown.enter)="open(p)">
+                <td>
+                  <span class="who">
+                    <span class="avatar" [style.background]="'hsl(' + hue(p.name) + ' 75% 90%)'"
+                          [style.color]="'hsl(' + hue(p.name) + ' 55% 30%)'">{{ initials(p.name) }}</span>
+                    <span class="who__t"><b>{{ p.name }}</b><small>{{ p.uhid }}</small></span>
+                  </span>
+                </td>
+                <td>{{ p.age }} · {{ p.gender }}</td>
+                <td class="hide-md">{{ p.phone }}</td>
+                <td class="hide-md">
+                  @for (c of p.conditions.slice(0, 2); track c) { <span class="tag">{{ c }}</span> }
+                  @if (p.conditions.length > 2) { <span class="tag tag--more">+{{ p.conditions.length - 2 }}</span> }
+                  @if (!p.conditions.length) { <small>None</small> }
+                </td>
+                <td><span class="visit">{{ p.lastVisit | date: 'd MMM y' }}<small>{{ daysAgo(p.lastVisit) }}</small></span></td>
+                <td><span class="pill status-{{ statusClass(p.status) }}">{{ p.status }}</span></td>
+                <td class="go" aria-hidden="true">›</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="empty">
+                <b>No patients found</b>
+                <span>Try a different search or clear the filters.</span>
+              </td></tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <footer class="pager">
+      <span class="pager__info">Showing {{ rangeStart() | number }}–{{ rangeEnd() | number }} of {{ total() | number }}</span>
+      <nav class="pager__nav" aria-label="Pagination">
+        <button type="button" (click)="goTo(page() - 1)" [disabled]="page() === 1" aria-label="Previous page">‹</button>
+        @for (p of pages(); track $index) {
+          @if (p === '…') { <span class="gap">…</span> }
+          @else { <button type="button" [class.on]="p === page()" [attr.aria-current]="p === page() ? 'page' : null" (click)="goTo($any(p))">{{ p }}</button> }
+        }
+        <button type="button" (click)="goTo(page() + 1)" [disabled]="page() === totalPages()" aria-label="Next page">›</button>
+      </nav>
+      <label class="select select--sm">
+        <span>Rows</span>
+        <select (change)="onPageSize($event)" aria-label="Rows per page">
+          @for (n of pageSizes; track n) { <option [value]="n" [selected]="pageSize() === n">{{ n }}</option> }
+        </select>
+      </label>
+    </footer>
+  </section>
+</div>
+
+<!-- Patient drawer -->
+@if (selected(); as p) {
+  <div class="scrim" (click)="close()"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" [attr.aria-label]="'Patient ' + p.name">
+    <button type="button" class="drawer__close" (click)="close()" aria-label="Close">✕</button>
+
+    <div class="drawer__top">
+      <span class="avatar avatar--lg" [style.background]="'hsl(' + hue(p.name) + ' 75% 90%)'"
+            [style.color]="'hsl(' + hue(p.name) + ' 55% 30%)'">{{ initials(p.name) }}</span>
+      <div>
+        <h2>{{ p.name }}</h2>
+        <small>{{ p.uhid }} · {{ p.age }} yrs · {{ p.gender }} · {{ p.bloodGroup }}</small>
+        <span class="pill status-{{ statusClass(p.status) }}">{{ p.status }}</span>
+      </div>
+    </div>
+
+    @if (p.allergies.length) {
+      <div class="warn"><b>⚠️ Allergies</b><span>{{ p.allergies.join(', ') }}</span></div>
+    }
+
+    <dl class="facts">
+      <div><dt>Phone</dt><dd>{{ p.phone }}</dd></div>
+      <div><dt>Last visit</dt><dd>{{ p.lastVisit | date: 'd MMM y' }} ({{ daysAgo(p.lastVisit) }})</dd></div>
+      <div><dt>Last diagnosis</dt><dd>{{ p.lastDiagnosis }}</dd></div>
+      @if (p.nextFollowUp) { <div><dt>Follow-up due</dt><dd>{{ p.nextFollowUp | date: 'd MMM y' }}</dd></div> }
+      <div class="wide"><dt>Conditions</dt>
+        <dd>@for (c of p.conditions; track c) { <span class="tag">{{ c }}</span> } @empty { None recorded }</dd></div>
+    </dl>
+
+    <div class="drawer__actions">
+     <button type="button" class="btn btn--primary" routerLink="/consultation"
+        [queryParams]="{ patientId: p.id }" (click)="close()">
+  ▶️ Start Consultation
+</button>
+      <button type="button" class="btn" [routerLink]="['/prescriptions/new']" [queryParams]="{ patientId: p.id }">💊 Write Prescription</button>
+      <button type="button" class="btn" [routerLink]="['/patients', p.id]">📋 Full History</button>
+      <button type="button" class="btn" [routerLink]="['/lab/order']" [queryParams]="{ patientId: p.id }">🧪 Order Lab Test</button>
+    </div>
+  </aside>
+}

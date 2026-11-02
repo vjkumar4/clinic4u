@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { catchError, of, switchMap, tap } from 'rxjs';
 import { RangeKey, ReportData, Slice } from './model/report.model';
-import { ReportsService } from '../../services/report_service';
+import { ReportsService } from '../../services/records_service';
 
 
 
@@ -13,11 +13,16 @@ interface Arc { dash: string; offset: number; color: string; label: string; }
   selector: 'app-reports',
   standalone: true,
   imports: [FormsModule],
-  templateUrl: './reports.html',
-  styleUrl: './reports.scss',
+  templateUrl: './records.html',
+  styleUrl: './records.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ReportsComponent {
+
+
+
+
+  
   private readonly api = inject(ReportsService);
 
   readonly tabs = ['Overview', 'Patient visits', 'Appointments', 'Revenue', 'Doctors', 'Clinical'];

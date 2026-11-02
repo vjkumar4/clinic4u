@@ -1,11 +1,17 @@
 <div class="ap">
   <header class="ap__head">
     <div>
-      <span class="eyebrow">Front desk</span>
+      <span class="eyebrow">{{ caps().book ? 'Front desk' : 'Schedule' }}</span>
       <h1>Appointments</h1>
-      <p>Book visits, confirm patients and check them in to the OPD queue.</p>
+      <p>
+        {{ caps().book
+          ? 'Book visits, confirm patients and check them in to the OPD queue.'
+          : 'Appointments and their status for the selected day.' }}
+      </p>
     </div>
-    <button class="btn btn--primary btn--lg" (click)="openNew()">＋ New appointment</button>
+    @if (caps().book) {
+      <button class="btn btn--primary btn--lg" (click)="openNew()">＋ New appointment</button>
+    }
   </header>
 
   <!-- week strip -->
@@ -37,10 +43,12 @@
   <section class="card">
     <div class="filters">
       <input type="search" placeholder="Search patient, MRN or phone" [ngModel]="search()" (ngModelChange)="search.set($event)">
-      <select [ngModel]="doctorFilter()" (ngModelChange)="doctorFilter.set($event)">
-        <option value="">All doctors</option>
-        @for (d of doctors(); track d.name) { <option [value]="d.name">{{ d.name }}</option> }
-      </select>
+      @if (caps().pickDoctor) {
+        <select [ngModel]="doctorFilter()" (ngModelChange)="doctorFilter.set($event)">
+          <option value="">All doctors</option>
+          @for (d of doctors(); track d.name) { <option [value]="d.name">{{ d.name }}</option> }
+        </select>
+      }
       <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
         <option value="">All status</option>
         @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
@@ -69,19 +77,20 @@
             <div class="appt__side">
               <span class="pill" [class]="'pill ' + statusClass(a.status)"><b></b>{{ a.status }}</span>
               <div class="acts">
-                @switch (a.status) {
-                  @case ('Scheduled') {
-                    <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Confirmed')">Confirm</button>
-                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Cancelled')">Cancel</button>
-                  }
-                  @case ('Confirmed') {
-                    <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="checkIn(a)">{{ busyId() === a.id ? 'Checking in…' : 'Check in' }}</button>
-                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'No-show')">No-show</button>
-                    <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Cancelled')">Cancel</button>
-                  }
-                  @case ('Checked-in') { <span class="token">Token {{ a.token }} · in queue</span> }
-                  @case ('Completed') { @if (a.token) { <span class="token token--done">Token {{ a.token }}</span> } }
+                @if (can(a, 'confirm')) {
+                  <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Confirmed')">Confirm</button>
                 }
+                @if (can(a, 'checkIn')) {
+                  <button class="btn btn--sm btn--primary" [disabled]="busyId() === a.id" (click)="checkIn(a)">{{ busyId() === a.id ? 'Checking in…' : 'Check in' }}</button>
+                }
+                @if (can(a, 'noShow')) {
+                  <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'No-show')">No-show</button>
+                }
+                @if (can(a, 'cancel')) {
+                  <button class="btn btn--sm btn--ghost" [disabled]="busyId() === a.id" (click)="setStatus(a, 'Cancelled')">Cancel</button>
+                }
+                @if (a.status === 'Checked-in') { <span class="token">Token {{ a.token }} · in queue</span> }
+                @if (a.status === 'Completed' && a.token) { <span class="token token--done">Token {{ a.token }}</span> }
               </div>
             </div>
           </article>
@@ -91,14 +100,16 @@
           <div class="empty__ic">📅</div>
           <b>No appointments for {{ dateLabel() }}</b>
           <p class="muted">Try another day or clear the filters.</p>
-          <button class="btn btn--primary" (click)="openNew()">Book an appointment</button>
+          @if (caps().book) {
+            <button class="btn btn--primary" (click)="openNew()">Book an appointment</button>
+          }
         </div>
       }
     }
   </section>
 
-  <!-- new appointment drawer -->
-  @if (drawer()) {
+  <!-- new appointment drawer (only roles that can book) -->
+  @if (drawer() && caps().book) {
     <div class="overlay" (click)="closeNew()"></div>
     <aside class="drawer" role="dialog" aria-label="New appointment">
       <header class="drawer__head"><div><h2>New appointment</h2><small>Book a visit for a patient</small></div><button class="x" (click)="closeNew()" aria-label="Close">×</button></header>

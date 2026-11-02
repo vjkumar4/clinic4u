@@ -1,7 +1,12 @@
 export type ApptStatus = 'Scheduled' | 'Confirmed' | 'Checked-in' | 'Completed' | 'Cancelled' | 'No-show';
 export type ApptType = 'New' | 'Follow-up';
 
-export interface Doctor { name: string; specialty: string; color: string; }
+export interface Doctor {
+  id: string;          // equals the login's user.doctorId, e.g. 'D0004'
+  name: string;
+  specialty: string;
+  color: string;
+}
 
 export interface Appointment {
   id: string;

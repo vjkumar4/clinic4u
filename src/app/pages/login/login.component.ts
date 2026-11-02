@@ -12,6 +12,8 @@ import { InputIconModule } from 'primeng/inputicon';
 import { CheckboxModule } from 'primeng/checkbox';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
+import { configFor } from '../../roles/role_config';
+import { RoleLoader } from '../../roles/role_loader';
 
 @Component({
   selector: 'app-login',
@@ -25,6 +27,7 @@ export class LoginComponent {
   private fb = inject(FormBuilder);
   private auth = inject(AuthService);
   private router = inject(Router);
+  private loader = inject(RoleLoader);
 
   loading = signal(false);
   errorMessage = signal<string | null>(null);
@@ -48,24 +51,33 @@ export class LoginComponent {
   }
 
   submit() {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
-
-    this.loading.set(true);
-    this.errorMessage.set(null);
-
-    const { email, password } = this.form.getRawValue();
-
-    this.auth
-      .login(email, password)
-      .pipe(finalize(() => this.loading.set(false)))
-      .subscribe({
-        next: () => this.router.navigateByUrl('/dashboard'),
-        error: (err: Error) => this.errorMessage.set(err.message)
-      });
+  if (this.form.invalid) {
+    this.form.markAllAsTouched();
+    return;
   }
+
+  this.loading.set(true);
+  this.errorMessage.set(null);
+
+  const { email, password } = this.form.getRawValue();
+
+  this.auth
+    .login(email, password)
+    .pipe(finalize(() => this.loading.set(false)))
+    .subscribe({
+      next: () => {
+        const cfg = configFor(this.auth.role());      // 1. check the role file
+        if (!cfg) {
+          this.auth.logout();                         // unknown role: don't leave them signed in
+          this.errorMessage.set('Your account role is not recognised.');
+          return;
+        }
+        this.loader.loadForCurrentRole();             // 2. load data for that role
+        this.router.navigateByUrl(cfg.home);          // 3. open that role's home page
+      },
+      error: (err: Error) => this.errorMessage.set(err.message),
+    });
+}
 
    
 }

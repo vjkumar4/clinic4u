@@ -2,8 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { Appointment, ApptStatus, Doctor, NewAppointment } from './model/appointments.model';
 import { AppointmentsService } from '../../services/appointments_service';
-const iso = (d: Date) => d.toLocaleDateString('en-CA'); // yyyy-mm-dd in local time
+
+
+
+import { apptCapsFor } from './model/appointments_access';
+import { AuthService } from '../../services/Auth_service';
+
+const iso = (d: Date) => d.toLocaleDateString('en-CA');
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const same = (a: unknown, b: unknown) =>                            // new
+  String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 
 @Component({
   selector: 'app-appointments',
@@ -14,6 +22,33 @@ const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.get
 })
 export class Appointments {
   private readonly api = inject(AppointmentsService);
+private readonly auth = inject(AuthService); 
+
+readonly caps = computed(() => apptCapsFor(this.auth.role()));
+
+/** Doctors: their own name ('' if their id matches no doctor). Everyone else: null = no restriction. */
+private readonly ownDoctor = computed(() =>
+  this.caps().ownOnly ? (this.doctors().find(d => same(d.id, this.auth.doctorId()))?.name ?? '') : null);
+
+private readonly visible = computed(() => {
+  const own = this.ownDoctor();
+  return own === null ? this.appts() : this.appts().filter(a => own !== '' && a.doctor === own);
+});
+
+can(a: Appointment, action: 'confirm' | 'checkIn' | 'cancel' | 'noShow'): boolean {
+  const c = this.caps();
+  switch (action) {
+    case 'confirm': return c.confirm && a.status === 'Scheduled';
+    case 'checkIn': return c.checkIn && a.status === 'Confirmed';
+    case 'cancel':  return c.cancel && (a.status === 'Scheduled' || a.status === 'Confirmed');
+    case 'noShow':  return c.noShow && a.status === 'Confirmed';
+  }
+}
+
+private guard(ok: boolean): boolean {
+  if (!ok) this.flash('You do not have access to this action.');
+  return ok;
+}
 
   readonly statuses: ApptStatus[] = ['Scheduled', 'Confirmed', 'Checked-in', 'Completed', 'Cancelled', 'No-show'];
   readonly slots = ['09:00', '09:20', '09:40', '10:00', '10:20', '10:40', '11:00', '11:20', '11:40', '12:00',
@@ -38,6 +73,12 @@ export class Appointments {
   readonly formError = signal<string | null>(null);
   form: NewAppointment = this.emptyForm();
 
+
+ same = (a: unknown, b: unknown) =>
+  String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+
+
   constructor() {
     this.api.getDoctors().subscribe(d => this.doctors.set(d));
     this.load();
@@ -50,6 +91,7 @@ export class Appointments {
       const d = addDays(start, i), key = iso(d);
       return { key, dow: d.toLocaleDateString('en-US', { weekday: 'short' }), num: d.getDate(),
         count: this.appts().filter(a => a.date === key && a.status !== 'Cancelled').length };
+        
     });
   });
   readonly monthLabel = computed(() => new Date(this.selectedDate() + 'T00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }));
@@ -100,8 +142,13 @@ export class Appointments {
   }
 
   /* ---------- row actions ---------- */
-  setStatus(a: Appointment, status: ApptStatus): void { this.run(a, this.api.updateStatus(a.id, status), `${a.patient.name} → ${status}`); }
+setStatus(a: Appointment, status: ApptStatus): void {
+  const action = status === 'Confirmed' ? 'confirm' : status === 'No-show' ? 'noShow' : 'cancel';
+  if (!this.guard(this.can(a, action))) return;
+  this.run(a, this.api.updateStatus(a.id, status), `${a.patient.name} → ${status}`);
+}
   checkIn(a: Appointment): void {
+    if (!this.guard(this.can(a, 'checkIn'))) return;
     this.busyId.set(a.id);
     this.api.checkIn(a.id).subscribe({
       next: u => { this.replace(u); this.busyId.set(null); this.flash(`Token ${u.token} created · ${u.patient.name} is now in the triage queue`); },
@@ -117,7 +164,9 @@ export class Appointments {
   }
 
   /* ---------- new appointment drawer ---------- */
-  openNew(): void { this.form = this.emptyForm(); this.submitted.set(false); this.formError.set(null); this.drawer.set(true); }
+  openNew(): void { 
+     if (!this.guard(this.caps().book)) return;
+    this.form = this.emptyForm(); this.submitted.set(false); this.formError.set(null); this.drawer.set(true); }
   closeNew(): void { this.drawer.set(false); }
   slotTaken(t: string): boolean {
     return this.appts().some(a => a.date === this.form.date && a.time === t && a.doctor === this.form.doctor && a.status !== 'Cancelled');

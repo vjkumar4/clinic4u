@@ -1,23 +1,37 @@
-export interface Medicine { name: string; dose: string; frequency: string; duration: string; instructions: string; }
+export type ConsultationTab = 'complaint' | 'vitals' | 'examination' | 'diagnosis' | 'prescription' | 'tests';
+export type SearchKind = 'icd' | 'medicine' | 'lab';
+export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
-export interface PastVisit { date: string; diagnosis: string; doctor: string; }
-
-export interface TriageVitals {
-  systolic: number; diastolic: number; pulse: number; respRate: number; temperature: number; spo2: number;
-  weight: number | null; height: number | null;
+export interface Patient {
+  id: string; name: string; age: number; sex: string; phone: string; bloodGroup: string;
+  visitType: string; token: number; allergies: string[]; conditions: string[];
+  lastVisit: string; doctor: string;
 }
-
-export interface ConsultationNotes { symptoms: string; examination: string; diagnosis: string; advice: string; followUp: string; }
-
-export interface ConsultationRecord {
-  visitId: string; token: string; startedAt: string; // ISO time
-  patient: { name: string; mrn: string; age: number; sex: 'M' | 'F'; phone: string; allergies: string };
-  doctor: string; priority: 'Routine' | 'Urgent' | 'Emergency';
-  chiefComplaint: string; nursingNotes: string;
-  vitals: TriageVitals;
-  history: PastVisit[];
-  notes: ConsultationNotes; medicines: Medicine[]; tests: string[];
+export interface Vital {
+  key: string; label: string; value: string | number; unit: string;
+  status: 'Normal' | 'Mild' | 'Review'; trend?: number[];
 }
+export interface ConsultationDraft {
+  complaint: string; duration: string; severity: string; history: string; notes: string;
+  examGeneral: string; examSystem: string; reviewOfSystems: string; followUpDate: string;
+}
+export interface Diagnosis { code: string; name: string; primary: boolean; }
+export interface Prescription {
+  id: string; name: string; dosage: string; frequency: string; days: number;
+  instructions: string; allergyConflict: boolean;
+}
+export interface Investigation { code: string; name: string; price: number; status: 'Ordered' | 'Pending' | 'Resulted'; }
+export interface RecentVisit { date: string; doctor: string; type: string; summary?: string; }
 
-/** What the page sends when saving a draft or completing. */
-export interface ConsultationPayload { notes: ConsultationNotes; medicines: Medicine[]; tests: string[]; }
+/** Shape returned by GET {api}/visits/:id */
+export interface Visit {
+  id: string; status: 'InProgress' | 'Completed'; startedAt: string; consultationFee: number;
+  patient: Patient; vitals: Vital[]; vitalsRecordedBy: string; vitalsRecordedAt: string;
+  insights: string[]; recentVisits: RecentVisit[];
+  draft: ConsultationDraft; diagnoses: Diagnosis[]; prescriptions: Prescription[]; investigations: Investigation[];
+}
+/** Body sent by PUT {api}/visits/:id (auto-save) */
+export type VisitSnapshot = Pick<Visit, 'draft' | 'diagnoses' | 'prescriptions' | 'investigations'>;
+
+export interface Suggestion { code?: string; name: string; detail?: string; price?: number; }
+export interface CompleteResult { billId: string; total: number; completedAt: string; }

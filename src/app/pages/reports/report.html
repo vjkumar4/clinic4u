@@ -1,0 +1,162 @@
+<section class="report">
+  <header class="report__head">
+    <div>
+      <h1>My report</h1>
+      @if (report(); as r) {
+        <p class="muted">{{ r.doctorName }} · {{ r.from | date: 'd MMM' }} to {{ r.to | date: 'd MMM y' }}</p>
+      }
+    </div>
+    <div class="report__actions">
+      <label class="sr-only" for="period">Period</label>
+      <select id="period" [ngModel]="period()" (ngModelChange)="setPeriod($event)">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+      <button type="button" class="btn" (click)="exportCsv()" [disabled]="!report()">Download CSV</button>
+      <button type="button" class="btn" (click)="print()">Print</button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="state state--error" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn btn--primary" (click)="retry()">Try again</button>
+    </div>
+  } @else if (loading() && !report()) {
+    <div class="state" aria-live="polite">Loading your report…</div>
+  } @else if (report()) {
+    <div class="kpis">
+      @for (k of kpis(); track k.label) {
+        <div class="kpi"><span>{{ k.label }}</span><strong>{{ k.value }}</strong></div>
+      }
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="Report sections">
+      @for (t of tabs; track t.key) {
+        <button type="button" role="tab" class="tab"
+                [class.tab--active]="tab() === t.key"
+                [attr.aria-selected]="tab() === t.key"
+                (click)="tab.set(t.key)">{{ t.label }}</button>
+      }
+    </nav>
+
+    @if (tab() !== 'diagnosis') {
+      <div class="tools">
+        <label class="sr-only" for="search">Search</label>
+        <input id="search" type="search" placeholder="Search patient or detail"
+               [ngModel]="search()" (ngModelChange)="search.set($event)">
+      </div>
+    }
+
+    <div class="panel" [class.panel--busy]="loading()">
+      @switch (tab()) {
+
+        @case ('consultations') {
+          <div class="table-wrap"><table>
+            <thead><tr><th>Patient</th><th>Date</th><th>Mode</th><th>Duration</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody>
+              @for (c of consultations(); track c.id) {
+                <tr>
+                  <td>{{ c.patientName }}</td>
+                  <td>{{ c.date | date: 'd MMM, h:mm a' }}</td>
+                  <td>{{ c.mode }}</td>
+                  <td>{{ c.durationMin }} min</td>
+                  <td>{{ c.reason }}</td>
+                  <td><span class="tag" [attr.data-s]="c.status">{{ c.status }}</span></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="empty">No consultations match. Clear the search or pick a longer period.</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
+
+        @case ('visits') {
+          <div class="table-wrap"><table>
+            <thead><tr><th>Patient</th><th>Age</th><th>Gender</th><th>Visit date</th><th>Type</th><th>Department</th></tr></thead>
+            <tbody>
+              @for (v of visits(); track v.id) {
+                <tr>
+                  <td>{{ v.patientName }}</td>
+                  <td>{{ v.age }}</td>
+                  <td>{{ v.gender }}</td>
+                  <td>{{ v.visitDate | date: 'd MMM y' }}</td>
+                  <td><span class="tag" [attr.data-s]="v.type">{{ v.type }}</span></td>
+                  <td>{{ v.department }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="empty">No visits match. Clear the search or pick a longer period.</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
+
+        @case ('diagnosis') {
+          <div class="trends">
+            @for (t of trends(); track t.icdCode) {
+              <article class="trend">
+                <div class="trend__head">
+                  <div>
+                    <h3>{{ t.diagnosis }}</h3>
+                    <span class="muted">{{ t.icdCode }} · {{ t.total }} cases</span>
+                  </div>
+                  <span class="delta" [class.delta--up]="t.changePct > 0" [class.delta--down]="t.changePct < 0">
+                    {{ t.changePct > 0 ? '+' : '' }}{{ t.changePct | number: '1.0-0' }}% vs previous
+                  </span>
+                </div>
+                <div class="bars" role="img" [attr.aria-label]="t.diagnosis + ' cases per period: ' + t.counts.join(', ')">
+                  @for (c of t.counts; track $index) {
+                    <div class="bars__col">
+                      <span class="bars__val">{{ c }}</span>
+                      <i [style.height.%]="(c / trendMax()) * 100"></i>
+                      <small>{{ report()!.trendLabels[$index] }}</small>
+                    </div>
+                  }
+                </div>
+              </article>
+            } @empty {
+              <p class="empty">No diagnoses recorded in this period.</p>
+            }
+          </div>
+        }
+
+        @case ('prescriptions') {
+          <div class="table-wrap"><table>
+            <thead><tr><th>Patient</th><th>Date</th><th>Medicines</th><th>Status</th></tr></thead>
+            <tbody>
+              @for (p of prescriptions(); track p.id) {
+                <tr>
+                  <td>{{ p.patientName }}</td>
+                  <td>{{ p.date | date: 'd MMM y' }}</td>
+                  <td>{{ medicineSummary(p) }}</td>
+                  <td><span class="tag" [attr.data-s]="p.status">{{ p.status }}</span></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="4" class="empty">No prescriptions match. Clear the search or pick a longer period.</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
+
+        @case ('followUps') {
+          <div class="table-wrap"><table>
+            <thead><tr><th>Patient</th><th>Due date</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody>
+              @for (f of followUps(); track f.id) {
+                <tr>
+                  <td>{{ f.patientName }}</td>
+                  <td>{{ f.dueDate | date: 'd MMM y' }}</td>
+                  <td>{{ f.reason }}</td>
+                  <td><span class="tag" [attr.data-s]="f.status">{{ f.status }}</span></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="4" class="empty">No follow-ups match. Clear the search.</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
+      }
+    </div>
+  }
+</section>

@@ -1,137 +1,295 @@
-<div class="cn">
-  @if (error()) {
-    <div class="card state"><h2>Couldn't load this consultation</h2><p class="muted">{{ error() }}</p>
-      <button class="btn btn--primary" (click)="load()">Retry</button> <a class="btn" [routerLink]="queueRoute">Back to queue</a></div>
-  } @else if (loading()) {
-    <div class="skel" style="height:96px"></div>
-    <div class="grid"><div><div class="skel" style="height:120px"></div><div class="skel" style="height:260px"></div></div><div class="skel" style="height:380px"></div></div>
-  } @else if (data(); as d) {
-    <nav class="crumb"><a [routerLink]="queueRoute">← Vitals &amp; Triage</a><span>/</span> Consultation</nav>
-
-    <header class="hero">
-      <i class="av av--xl">{{ initials(d.patient.name) }}</i>
-      <div class="hero__main">
-        <h1>{{ d.patient.name }}</h1>
-        <p>{{ d.patient.mrn }} · {{ d.patient.age }} / {{ d.patient.sex }} · {{ d.patient.phone }}</p>
-        <div class="tags">
-          <span class="tag">Token {{ d.token }}</span>
-          <span class="tag">{{ d.doctor }}</span>
-          <span class="prio" [class]="'prio ' + d.priority"><b></b>{{ d.priority }}</span>
-          <span class="pill"><b></b>In consultation</span>
-        </div>
-      </div>
-      <div class="timer"><small>Consultation time</small><b>{{ elapsed() }}</b></div>
-    </header>
-
-    <div class="grid">
-      <main>
-        <!-- vitals -->
-        <section class="card">
-          <div class="card__head"><h2>Triage vitals</h2><small class="muted">Recorded by nursing</small></div>
-          <div class="tiles">
-            @for (t of tiles(); track t.label) {
-              <div class="tile" [class]="'tile ' + t.flag">
-                <span>{{ t.label }}</span><b>{{ t.value }}<em>{{ t.unit }}</em></b>
-                @if (t.flag !== 'ok') { <i>{{ t.flag === 'high' ? 'Critical' : 'Check' }}</i> }
-              </div>
-            }
-          </div>
-          <div class="cc"><div><small class="muted">Chief complaint</small><p>{{ d.chiefComplaint }}</p></div>
-            <div><small class="muted">Nursing notes</small><p>{{ d.nursingNotes || '—' }}</p></div></div>
-        </section>
-
-        <!-- notes -->
-        <section class="card">
-          <div class="card__head"><h2>Consultation notes</h2></div>
-          <label>Symptoms &amp; history</label>
-          <textarea rows="3" [(ngModel)]="notes.symptoms" placeholder="Onset, duration, associated symptoms…"></textarea>
-          <label class="gap">Examination findings</label>
-          <textarea rows="3" [(ngModel)]="notes.examination" placeholder="General and systemic examination…"></textarea>
-          <label class="gap">Diagnosis <i>*</i></label>
-          <input [(ngModel)]="notes.diagnosis" [class.bad]="submitted() && !notes.diagnosis.trim()" placeholder="Primary diagnosis">
-          <div class="chips">
-            @for (h of diagnosisHints; track h) { <button type="button" class="chip" (click)="notes.diagnosis = h">{{ h }}</button> }
-          </div>
-        </section>
-
-        <!-- prescription -->
-        <section class="card">
-          <div class="card__head"><h2>Prescription</h2><button class="btn btn--primary btn--sm" (click)="addMedicine()">+ Add medicine</button></div>
-          <div class="chips chips--top">
-            <small class="muted">Quick add:</small>
-            @for (q of quickMeds; track q.name) { <button type="button" class="chip" (click)="addMedicine(q)">+ {{ q.name }}</button> }
-          </div>
-          @for (m of medicines; track $index) {
-            <div class="med">
-              <div class="med__grid">
-                <div class="f2"><label>Medicine</label><input [(ngModel)]="m.name" placeholder="Name" [class.bad]="hasAllergyWarning(m)"></div>
-                <div><label>Dose</label><input [(ngModel)]="m.dose" placeholder="500 mg"></div>
-                <div><label>Frequency</label>
-                  <select [(ngModel)]="m.frequency">@for (f of frequencies; track f) { <option>{{ f }}</option> }</select></div>
-                <div><label>Duration</label><input [(ngModel)]="m.duration" placeholder="5 days"></div>
-                <div class="f2"><label>Instructions</label><input [(ngModel)]="m.instructions" placeholder="After food"></div>
-              </div>
-              <button class="rm" (click)="removeMedicine($index)" aria-label="Remove medicine">×</button>
-              @if (hasAllergyWarning(m)) { <div class="medwarn">⚠ Patient is allergic to {{ d.patient.allergies }}. Review before prescribing.</div> }
-            </div>
-          } @empty {
-            <div class="empty">No medicines added yet. Use Quick add or “Add medicine”.</div>
-          }
-        </section>
-
-        <!-- investigations + follow up -->
-        <section class="card">
-          <div class="card__head"><h2>Investigations &amp; follow-up</h2></div>
-          <div class="chips">
-            @for (t of testOptions; track t) { <button type="button" class="chip" [class.on]="tests.includes(t)" (click)="toggleTest(t)">{{ tests.includes(t) ? '✓ ' : '' }}{{ t }}</button> }
-          </div>
-          <div class="two">
-            <div><label class="gap">Advice to patient</label><textarea rows="3" [(ngModel)]="notes.advice" placeholder="Rest, fluids, diet, warning signs…"></textarea></div>
-            <div><label class="gap">Follow-up date</label><input type="date" [(ngModel)]="notes.followUp"></div>
-          </div>
-        </section>
-      </main>
-
-      <aside>
-        @if (d.patient.allergies && d.patient.allergies !== 'None') {
-          <div class="alert"><b>⚠ Allergy</b><span>{{ d.patient.allergies }}</span></div>
+<ng-template #searchBox let-kind="kind" let-ph="ph">
+  <div class="search-box">
+    <svg class="s-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" autocomplete="off" [placeholder]="ph" [ngModel]="query()" (ngModelChange)="onSearch(kind, $event)" (keydown.enter)="addTyped(kind)">
+    @if (searching()) { <svg class="spin" viewBox="0 0 24 24" aria-label="Searching"><circle cx="12" cy="12" r="9" pathLength="100"/></svg> }
+    @if (suggestions().length) {
+      <ul class="suggestions">
+        @for (s of suggestions(); track (s.code ?? '') + s.name) {
+          <li><button type="button" (click)="pick(kind, s)"><strong>{{ s.name }}</strong><small>{{ s.code ?? s.detail }}</small>@if (s.price) { <em>₹{{ s.price | number }}</em> }</button></li>
         }
-        <section class="card">
-          <div class="card__head"><h2>Previous visits</h2></div>
-          <ol class="tl">
-            @for (h of d.history; track h.date) {
-              <li><i></i><div><b>{{ h.diagnosis }}</b><small class="muted">{{ h.date }} · {{ h.doctor }}</small></div></li>
-            } @empty { <li class="muted">First visit.</li> }
-          </ol>
-        </section>
-        <section class="card summary">
-          <div class="card__head"><h2>This visit</h2></div>
-          <dl>
-            <dt>Diagnosis</dt><dd>{{ notes.diagnosis || '—' }}</dd>
-            <dt>Medicines</dt><dd>{{ medicines.length }}</dd>
-            <dt>Tests ordered</dt><dd>{{ tests.length }}</dd>
-            <dt>Follow-up</dt><dd>{{ notes.followUp || '—' }}</dd>
-          </dl>
-        </section>
-      </aside>
-    </div>
-
-    <footer class="bar">
-      <a class="btn" [routerLink]="queueRoute">Back to queue</a>
-      <span class="sp"></span>
-      <button class="btn" [disabled]="saving() !== null" (click)="saveDraft()">{{ saving() === 'draft' ? 'Saving…' : 'Save draft' }}</button>
-      <button class="btn btn--primary" [disabled]="saving() !== null" (click)="askComplete()">{{ saving() === 'complete' ? 'Completing…' : 'Complete consultation ✓' }}</button>
-    </footer>
-
-    @if (confirming()) {
-      <div class="overlay" (click)="confirming.set(false)"></div>
-      <div class="modal" role="dialog" aria-label="Complete consultation">
-        <h2>Complete this consultation?</h2>
-        <p class="muted">The visit for {{ d.patient.name }} will be marked Completed and the prescription will be sent to billing/pharmacy.</p>
-        <div class="modal__sum"><span><b>{{ notes.diagnosis }}</b></span><span>{{ medicines.length }} medicine(s) · {{ tests.length }} test(s)</span></div>
-        <div class="modal__act"><button class="btn" (click)="confirming.set(false)">Keep editing</button><button class="btn btn--primary" (click)="complete()">Yes, complete</button></div>
-      </div>
+      </ul>
     }
-  }
-  @if (toast(); as t) { <div class="toast" role="status">{{ t }}</div> }
-</div>
+  </div>
+</ng-template>
+
+<ng-template #empty let-text="text">
+  <div class="empty-state">
+    <svg class="empty-art" viewBox="0 0 64 64" aria-hidden="true">
+      <rect x="14" y="10" width="36" height="46" rx="6"/><path d="M24 10V7h16v3M22 26h20M22 34h20M22 42h12"/>
+    </svg>
+    <p>{{ text }}</p>
+  </div>
+</ng-template>
+
+@if (svc.visit(); as v) {
+@let d = svc.draft();
+
+<main class="consultation-page">
+  <header class="status-bar card">
+    <span class="live-pill" [class.done]="svc.readOnly()"><i></i>{{ svc.readOnly() ? 'Completed' : 'In consultation' }}</span>
+    @if (!svc.readOnly()) { <span class="elapsed" title="Time in consultation">{{ elapsed() }}</span> }
+    <svg class="ecg" viewBox="0 0 120 28" aria-hidden="true"><path pathLength="100" d="M0 14h30l6 0 4-10 6 20 4-10h20l6 0 4-6 4 12 4-6h32"/></svg>
+    <span class="muted">Visit {{ v.id }} · {{ v.startedAt | date:'dd MMM yyyy, h:mm a' }}</span>
+    <span class="grow"></span>
+    <svg class="ring" viewBox="0 0 36 36" role="img" [attr.aria-label]="doneCount() + ' of 6 sections done'">
+      <circle class="track" cx="18" cy="18" r="15.9" pathLength="100"/>
+      <circle class="fill" cx="18" cy="18" r="15.9" pathLength="100" [style.stroke-dashoffset]="100 - doneCount() / 6 * 100"/>
+      <text x="18" y="21.5" text-anchor="middle">{{ doneCount() }}/6</text>
+    </svg>
+    @if (!svc.readOnly()) {
+      <button type="button" class="save-chip" [attr.data-state]="svc.saveState()" (click)="svc.saveState() === 'error' ? saveNow() : null">
+        @switch (svc.saveState()) {
+          @case ('saving') { <svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" pathLength="100"/></svg> }
+          @case ('saved') { <svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path pathLength="100" d="m5 12.5 4.2 4.2L19 7"/></svg> }
+        }
+        {{ saveLabel() }}
+      </button>
+    }
+  </header>
+
+  @if (svc.loading()) { <div class="load-bar" role="progressbar" aria-label="Loading live data"><span></span></div> }
+
+  <aside class="patient-column">
+    <section class="card patient-card">
+      <div class="patient-heading">
+        <div class="avatar">
+          <svg class="avatar-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/></svg>
+          <span>{{ initials() }}</span>
+        </div>
+        <div class="patient-title"><h2>{{ v.patient.name }}</h2><p>{{ v.patient.id }} <span>•</span> Token {{ v.patient.token }}</p></div>
+        <span class="online-dot" title="Checked in"></span>
+      </div>
+      <div class="patient-facts">
+        <div class="fact-row"><span class="fact-label">Age / Sex</span><strong>{{ v.patient.age }} / {{ v.patient.sex }}</strong></div>
+        <div class="fact-row"><span class="fact-label">Phone</span><strong><a [href]="'tel:' + v.patient.phone">{{ v.patient.phone }}</a></strong></div>
+        <div class="fact-row"><span class="fact-label">Blood group</span><strong>{{ v.patient.bloodGroup }}</strong></div>
+        <div class="fact-row"><span class="fact-label">Visit type</span><strong>{{ v.patient.visitType }}</strong></div>
+      </div>
+      <div class="last-visit"><div><span>Last visit</span><strong>{{ v.patient.lastVisit }}</strong></div><div><span>Doctor</span><strong>{{ v.patient.doctor }}</strong></div></div>
+
+      @if (v.patient.allergies.length) {
+        <div class="alert-card allergy-card">
+          <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>
+          <div><strong>Allergy alert</strong>@for (a of v.patient.allergies; track a) { <p>{{ a }}</p> }</div>
+        </div>
+      }
+      @if (v.patient.conditions.length) {
+        <div class="alert-card conditions-card">
+          <svg class="alert-icon beat" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+          <div><strong>Known conditions</strong><ul>@for (c of v.patient.conditions; track c) { <li>{{ c }}</li> }</ul></div>
+        </div>
+      }
+      @if (v.insights.length) {
+        <div class="insights"><h3>Care insights</h3><ul>@for (i of v.insights; track i) { <li>{{ i }}</li> }</ul></div>
+      }
+      <div class="recent-visits">
+        <h3>Recent visits</h3>
+        @for (r of v.recentVisits; track r.date) {
+          <div class="recent-item">
+            <span class="recent-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
+            <div><strong>{{ r.date }}</strong><span>{{ r.doctor }}</span><small>{{ r.type }}{{ r.summary ? ' · ' + r.summary : '' }}</small></div>
+          </div>
+        } @empty { <p class="empty-summary">No previous visits</p> }
+      </div>
+    </section>
+  </aside>
+
+  <section class="workspace-column">
+    <nav class="tabs card" aria-label="Consultation sections">
+      @for (tab of tabs; track tab.id) {
+        <button type="button" class="tab-button" [class.active]="activeTab() === tab.id" (click)="setTab(tab.id)">
+          <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path pathLength="100" [attr.d]="tab.icon"/></svg>{{ tab.label }}
+          @if (done()[tab.id]) { <i class="tab-done" title="Completed"></i> }
+        </button>
+      }
+    </nav>
+
+    <section class="card form-card">
+      <fieldset class="lock" [disabled]="svc.readOnly()">
+      @switch (activeTab()) {
+        @case ('complaint') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Chief complaint</h2><span class="section-step">01 / 06</span></div>
+            <label class="field-label" for="complaint">Chief complaint <span>*</span></label>
+            <textarea id="complaint" rows="2" maxlength="500" [ngModel]="d.complaint" (ngModelChange)="set('complaint', $event)"></textarea>
+            <div class="symptom-chips">@for (s of symptoms; track s) { <button type="button" (click)="addSymptom(s)">{{ s }}</button> }</div>
+            <div class="two-fields">
+              <label>Duration<select [ngModel]="d.duration" (ngModelChange)="set('duration', $event)">@for (o of durations; track o) { <option [value]="o">{{ o }}</option> }</select></label>
+              <label>Severity<select [ngModel]="d.severity" (ngModelChange)="set('severity', $event)">@for (o of severities; track o) { <option [value]="o">{{ o }}</option> }</select></label>
+            </div>
+            <label class="field-label">History of present illness</label>
+            <textarea rows="3" maxlength="500" [ngModel]="d.history" (ngModelChange)="set('history', $event)"></textarea>
+            <div class="character-count">{{ d.history.length }}/500</div>
+            <label class="field-label">Additional clinical notes</label>
+            <textarea rows="2" maxlength="500" placeholder="Enter relevant clinical notes..." [ngModel]="d.notes" (ngModelChange)="set('notes', $event)"></textarea>
+            <div class="character-count">{{ d.notes.length }}/500</div>
+          </div>
+        }
+        @case ('vitals') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Vitals & Triage</h2><span class="section-step">02 / 06</span></div>
+            <div class="recorded-by"><span class="recording-dot"></span> Recorded by {{ v.vitalsRecordedBy }} · {{ v.vitalsRecordedAt | date:'dd MMM yyyy, h:mm a' }}</div>
+            <div class="vitals-grid">
+              @for (vital of v.vitals; track vital.key) {
+                <div class="vital-tile">
+                  <span>{{ vital.label }}</span>
+                  <strong>{{ vital.value }} <small>{{ vital.unit }}</small></strong>
+                  <em [class.review]="vital.status === 'Review'" [class.mild]="vital.status === 'Mild'">{{ vital.status }}</em>
+                  @if (vital.trend) { <svg class="vital-spark" viewBox="0 0 70 20" aria-hidden="true"><polyline pathLength="100" [attr.points]="spark(vital.trend)"/></svg> }
+                </div>
+              } @empty { <ng-container *ngTemplateOutlet="empty; context: { text: 'No vitals recorded for this visit.' }" /> }
+            </div>
+            <p class="helper-text">Sparklines show recent readings. Verify measurements before acting.</p>
+          </div>
+        }
+        @case ('examination') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Clinical examination</h2><span class="section-step">03 / 06</span></div>
+            <label class="field-label">General examination</label>
+            <textarea rows="3" placeholder="General appearance, hydration, distress..." [ngModel]="d.examGeneral" (ngModelChange)="set('examGeneral', $event)"></textarea>
+            <label class="field-label">System examination</label>
+            <textarea rows="4" placeholder="Enter relevant examination findings..." [ngModel]="d.examSystem" (ngModelChange)="set('examSystem', $event)"></textarea>
+            <label class="field-label">Review of systems</label>
+            <textarea rows="3" placeholder="Record relevant positive and negative findings..." [ngModel]="d.reviewOfSystems" (ngModelChange)="set('reviewOfSystems', $event)"></textarea>
+          </div>
+        }
+        @case ('diagnosis') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Diagnosis</h2><span class="section-step">04 / 06</span></div>
+            <ng-container *ngTemplateOutlet="searchBox; context: { kind: 'icd', ph: 'Search ICD-10 code or name…' }" />
+            @for (dx of svc.diagnoses(); track dx.name; let i = $index) {
+              <div class="list-row"><span class="list-number">{{ i + 1 }}.</span>
+                <div class="list-content"><strong>{{ dx.name }}</strong><small>ICD-10: {{ dx.code }}</small></div>
+                <button type="button" class="badge" [class.primary]="dx.primary" (click)="svc.setPrimary(dx.name)">{{ dx.primary ? 'Primary' : 'Make primary' }}</button>
+                <button type="button" class="row-remove" aria-label="Remove" (click)="svc.removeDiagnosis(dx.name)">×</button>
+              </div>
+            } @empty { <ng-container *ngTemplateOutlet="empty; context: { text: 'No diagnosis yet. Search above to add one.' }" /> }
+          </div>
+        }
+        @case ('prescription') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Prescription</h2><span class="section-step">05 / 06</span></div>
+            <ng-container *ngTemplateOutlet="searchBox; context: { kind: 'medicine', ph: 'Search medicine…' }" />
+            @for (rx of svc.prescriptions(); track rx.id; let i = $index) {
+              <div class="list-row rx-row" [class.conflict]="rx.allergyConflict"><span class="list-number">{{ i + 1 }}.</span>
+                <div class="list-content"><strong>{{ rx.name }}</strong><small>{{ rx.dosage }}</small>
+                  @if (rx.allergyConflict) { <span class="badge danger">Allergy conflict</span> }
+                </div>
+                <div class="rx-controls">
+                  <select aria-label="Frequency" [ngModel]="rx.frequency" (ngModelChange)="svc.updatePrescription(rx.id, { frequency: $event })">@for (f of frequencies; track f) { <option [value]="f">{{ f }}</option> }</select>
+                  <input type="number" min="1" max="365" aria-label="Days" [ngModel]="rx.days" (ngModelChange)="svc.updatePrescription(rx.id, { days: +$event || 1 })">
+                  <select aria-label="Timing" [ngModel]="rx.instructions" (ngModelChange)="svc.updatePrescription(rx.id, { instructions: $event })">@for (t of timings; track t) { <option [value]="t">{{ t }}</option> }</select>
+                </div>
+                <button type="button" class="row-remove" aria-label="Remove" (click)="svc.removePrescription(rx.id)">×</button>
+              </div>
+            } @empty { <ng-container *ngTemplateOutlet="empty; context: { text: 'No medicines added yet.' }" /> }
+            <p class="helper-text">Review allergies, interactions, dose and duration before signing.</p>
+          </div>
+        }
+        @case ('tests') {
+          <div class="tab-panel">
+            <div class="section-heading"><h2>Investigations & follow-up</h2><span class="section-step">06 / 06</span></div>
+            <ng-container *ngTemplateOutlet="searchBox; context: { kind: 'lab', ph: 'Search lab test…' }" />
+            @for (t of svc.investigations(); track t.code; let i = $index) {
+              <div class="list-row"><span class="list-number">{{ i + 1 }}.</span>
+                <div class="list-content"><strong>{{ t.name }}</strong><small>₹{{ t.price | number }}</small></div>
+                <span class="badge pending">{{ t.status }}</span>
+                <button type="button" class="row-remove" aria-label="Remove" (click)="svc.removeInvestigation(t.code)">×</button>
+              </div>
+            } @empty { <ng-container *ngTemplateOutlet="empty; context: { text: 'No investigations ordered.' }" /> }
+            <label class="field-label follow-up-field">Follow-up date<input type="date" [ngModel]="d.followUpDate" (ngModelChange)="set('followUpDate', $event)"></label>
+          </div>
+        }
+      }
+      </fieldset>
+
+      <div class="action-bar">
+        <button class="action-button" type="button" [disabled]="svc.readOnly() || svc.saveState() === 'saving'" (click)="saveNow()">Save now</button>
+        <button class="action-button" type="button" (click)="openReview('preview')">Preview</button>
+        <button class="action-button primary-action" type="button" [disabled]="svc.readOnly()" (click)="openReview('complete')">{{ svc.readOnly() ? 'Visit Completed' : 'Complete Visit' }}</button>
+      </div>
+    </section>
+  </section>
+
+  <aside class="summary-column">
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Visit Summary</h2><span class="badge progress" [class.completed]="svc.readOnly()">{{ svc.readOnly() ? 'Completed' : 'In Progress' }}</span></div>
+      <div class="summary-row"><span>Patient</span><strong>{{ v.patient.name }} ({{ v.patient.id }})</strong></div>
+      <div class="summary-row"><span>Started</span><strong>{{ v.startedAt | date:'dd MMM yyyy, h:mm a' }}</strong></div>
+      <div class="summary-row"><span>Doctor</span><strong>{{ v.patient.doctor }}</strong></div>
+      <div class="summary-row"><span>Visit type</span><strong>{{ v.patient.visitType }}</strong></div>
+    </section>
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Diagnosis <span class="count">{{ svc.diagnoses().length }}</span></h2><button type="button" class="text-button" (click)="setTab('diagnosis')">＋ Add</button></div>
+      @for (dx of svc.diagnoses(); track dx.name; let i = $index) {
+        <div class="summary-list"><span>{{ i + 1 }}.</span><div><strong>{{ dx.name }}</strong><small>ICD-10: {{ dx.code }}</small></div>@if (dx.primary) { <span class="badge primary">Primary</span> }</div>
+      } @empty { <p class="empty-summary">No diagnosis added</p> }
+    </section>
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Prescription <span class="count">{{ svc.prescriptions().length }}</span></h2><button type="button" class="text-button" (click)="setTab('prescription')">＋ Add</button></div>
+      @for (rx of svc.prescriptions(); track rx.id; let i = $index) {
+        <div class="summary-list"><span>{{ i + 1 }}.</span><div><strong>{{ rx.name }}</strong><small>{{ rx.frequency }} · {{ rx.days }} days · {{ rx.instructions }}</small></div>@if (rx.allergyConflict) { <span class="badge danger">Allergy</span> }</div>
+      } @empty { <p class="empty-summary">No medicines added</p> }
+    </section>
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Investigations <span class="count">{{ svc.investigations().length }}</span></h2><button type="button" class="text-button" (click)="setTab('tests')">＋ Add</button></div>
+      @for (t of svc.investigations(); track t.code; let i = $index) {
+        <div class="summary-list"><span>{{ i + 1 }}.</span><div><strong>{{ t.name }}</strong></div><span class="badge pending">{{ t.status }}</span></div>
+      } @empty { <p class="empty-summary">No tests ordered</p> }
+    </section>
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Billing</h2><span class="text-muted">Estimate</span></div>
+      <div class="billing-row"><span>Consultation fee</span><strong>₹{{ svc.fee() | number }}</strong></div>
+      <div class="billing-row"><span>Lab tests ({{ svc.investigations().length }})</span><strong>₹{{ svc.labTotal() | number }}</strong></div>
+      <div class="billing-total"><span>Total</span><strong>₹{{ svc.total() | number }}</strong></div>
+      <p class="billing-note">Final amount is confirmed by billing when the visit is completed.</p>
+    </section>
+    <section class="card summary-card">
+      <div class="summary-header"><h2>Follow-up</h2><button type="button" class="text-button" (click)="setTab('tests')">Edit</button></div>
+      <div class="follow-up-date"><span>Date</span><strong>{{ d.followUpDate ? (d.followUpDate | date:'dd MMM yyyy') : 'Not set' }}</strong></div>
+    </section>
+  </aside>
+</main>
+
+@if (review(); as mode) {
+  <div class="modal-backdrop" (click)="review.set(null)">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="rv-title" (click)="$event.stopPropagation()">
+      <header><h2 id="rv-title">{{ mode === 'complete' ? 'Review & complete visit' : 'Visit preview' }}</h2><button type="button" class="row-remove" aria-label="Close" (click)="review.set(null)">×</button></header>
+      <div class="modal-body">
+        <p><strong>{{ v.patient.name }}</strong> · {{ v.patient.id }} · {{ v.patient.age }}/{{ v.patient.sex }}</p>
+        <h3>Complaint</h3><p>{{ d.complaint }} <small>({{ d.duration }}, {{ d.severity }})</small></p>
+        <h3>Diagnosis</h3>
+        <ul>@for (dx of svc.diagnoses(); track dx.name) { <li>{{ dx.name }} <small>{{ dx.code }}</small>@if (dx.primary) { <em> · primary</em> }</li> } @empty { <li class="muted">None</li> }</ul>
+        <h3>Prescription</h3>
+        <ul>@for (rx of svc.prescriptions(); track rx.id) { <li>{{ rx.name }}, {{ rx.dosage }}, {{ rx.frequency }} × {{ rx.days }} days, {{ rx.instructions }}</li> } @empty { <li class="muted">None</li> }</ul>
+        <h3>Investigations</h3>
+        <ul>@for (t of svc.investigations(); track t.code) { <li>{{ t.name }}</li> } @empty { <li class="muted">None</li> }</ul>
+        <p class="modal-total">Estimated total <strong>₹{{ svc.total() | number }}</strong></p>
+        @for (w of warnings(); track w) { <div class="alert-card allergy-card"><div><strong>Check before signing</strong><p>{{ w }}</p></div></div> }
+      </div>
+      <footer>
+        <button type="button" class="action-button" (click)="print()">Print</button>
+        <button type="button" class="action-button" (click)="review.set(null)">Back</button>
+        @if (mode === 'complete') {
+          <button type="button" class="action-button primary-action" [disabled]="completing()" (click)="confirmComplete()">{{ completing() ? 'Completing…' : 'Confirm & complete' }}</button>
+        }
+      </footer>
+    </section>
+  </div>
+}
+
+} @else if (svc.error()) {
+  <main class="consultation-page"><section class="card error-card">
+    <h2>{{ svc.error() }}</h2><p>Check the visit ID or your connection and try again.</p>
+    <button class="action-button primary-action" type="button" (click)="retryLoad()">Retry</button>
+  </section></main>
+} @else {
+  <main class="consultation-page" aria-busy="true"><div class="sk"></div><div class="sk wide"></div><div class="sk"></div></main>
+}
+
+@if (toast(); as t) {
+  <div class="toast" [attr.data-type]="t.type" role="status">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" pathLength="100"/><path pathLength="100" d="m7 12.5 3.2 3.2L17 9"/></svg>{{ t.text }}
+  </div>
+}

@@ -14,7 +14,7 @@
     </div>
 
    <nav class="nav">
-  @for (n of nav; track n.path; let i = $index) {
+@for (n of visibleNav(); track n.path; let i = $index) {
     @if (n.children) {
       <div class="group" [class.open]="isOpen(n)" [style.--i]="i">
         <button type="button" class="parent" [class.active]="isActive(n)" (click)="toggle(n)"
@@ -61,7 +61,12 @@
         <h1>{{ greeting }}, {{ name() }}</h1>
         <small>Here is what's happening at your clinic today.</small>
       </div>
+<div class="date">
+        <span class="date__icon" aria-hidden="true">📅</span>
+        <div><strong>{{ now | date:'d MMM y' }}</strong><small>{{ now | date:'EEE, hh:mm a' }}</small></div>
+      </div>
 
+      
       <label class="search">
         <svg viewBox="0 0 24 24"><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3"/></svg>
         <input type="search" placeholder="Search patients, visits..." />
@@ -75,13 +80,13 @@
       <div class="user">
         <button class="avatar" type="button" (click)="$event.stopPropagation(); menuOpen.set(!menuOpen())"
                 aria-haspopup="menu" [attr.aria-expanded]="menuOpen()">{{ initial() }}</button>
-        @if (menuOpen()) {
+        <!-- @if (menuOpen()) {
           <div class="menu" role="menu" (click)="$event.stopPropagation()">
             <p><strong>{{ name() }}</strong><small>{{ auth.user()?.email }}</small></p>
             <a routerLink="/settings" role="menuitem" (click)="menuOpen.set(false)">Settings</a>
             <button type="button" role="menuitem" (click)="auth.logout()">Sign out</button>
           </div>
-        }
+        } -->
       </div>
     </header>
 

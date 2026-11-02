@@ -1,0 +1,218 @@
+<section class="billing">
+  <header class="head">
+    <div>
+      <h1>Billing</h1>
+      <p class="sub">Invoices, payments and outstanding balances</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost" (click)="refresh()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Refresh' }}</button>
+      <button class="btn primary" (click)="openNew()">+ New bill</button>
+    </div>
+  </header>
+
+  @if (error()) { <div class="banner">{{ error() }}</div> }
+
+  <div class="stats">
+    @for (s of stats(); track s.label) {
+      <div class="stat {{ s.tone }}">
+        <span class="stat-label">{{ s.label }}</span>
+        <strong>{{ s.money ? (s.value | currency: 'INR':'symbol':'1.0-0') : s.value }}</strong>
+      </div>
+    }
+  </div>
+
+  <div class="toolbar">
+    <div class="chips">
+      @for (f of filters; track f) {
+        <button class="chip" [class.on]="filter() === f" (click)="filter.set(f)">
+          {{ f === 'all' ? 'All' : label[f] }} <small>{{ counts()[f] }}</small>
+        </button>
+      }
+    </div>
+    <input class="search" type="search" placeholder="Search invoice, patient or phone"
+           [value]="search()" (input)="search.set($any($event.target).value)" />
+  </div>
+
+  <div class="card table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Invoice</th><th>Patient</th><th>Date</th>
+          <th class="r">Total</th><th class="r">Paid</th><th class="r">Due</th>
+          <th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (b of rows(); track b.id) {
+          @let t = totals(b);
+          <tr [class.muted]="b.status === 'cancelled'">
+            <td><button class="link" (click)="view(b)">{{ b.number }}</button></td>
+            <td>
+              <div class="pt">{{ b.patientName }}</div>
+              @if (b.phone) { <div class="small">{{ b.phone }}</div> }
+            </td>
+            <td>{{ b.createdAt | date: 'dd MMM, hh:mm a' }}</td>
+            <td class="r">{{ t.total | currency: 'INR':'symbol':'1.0-0' }}</td>
+            <td class="r">{{ t.paid | currency: 'INR':'symbol':'1.0-0' }}</td>
+            <td class="r" [class.due]="t.due > 0 && b.status !== 'cancelled'">
+              {{ b.status === 'cancelled' ? '—' : (t.due | currency: 'INR':'symbol':'1.0-0') }}
+            </td>
+            <td><span class="badge {{ b.status }}">{{ label[b.status] }}</span></td>
+            <td class="actions">
+              @if (canPay(b)) { <button class="btn sm primary" (click)="openPay(b)">Collect</button> }
+              <button class="btn sm ghost" (click)="view(b)">View</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="8" class="empty">{{ loading() ? 'Loading bills…' : 'No bills found' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ───────────── New bill ───────────── -->
+@if (modal() === 'new') {
+  <div class="overlay" (click)="closeModal()">
+    <div class="modal wide" (click)="$event.stopPropagation()">
+      <header><h2>New bill</h2><button class="x" (click)="closeModal()" aria-label="Close">×</button></header>
+
+      <div class="body">
+        <div class="grid2">
+          <label>Patient name
+            <input [class.invalid]="showErrors() && !name().trim()" [value]="name()" (input)="name.set($any($event.target).value)" placeholder="Full name" />
+          </label>
+          <label>Phone
+            <input [value]="phone()" (input)="phone.set($any($event.target).value)" placeholder="Optional" inputmode="tel" />
+          </label>
+        </div>
+
+        <div class="lines">
+          <div class="line head"><span>Description</span><span>Qty</span><span>Price</span><span class="r">Amount</span><span></span></div>
+          @for (it of items(); track $index; let i = $index) {
+            <div class="line">
+              <input [class.invalid]="showErrors() && !it.description.trim()" [value]="it.description"
+                     (input)="setItem(i, 'description', $any($event.target).value)" placeholder="Service or item" />
+              <input type="number" min="1" [value]="it.qty" (input)="setItem(i, 'qty', $any($event.target).value)" />
+              <input type="number" min="0" [value]="it.price" (input)="setItem(i, 'price', $any($event.target).value)" />
+              <span class="r amt">{{ it.qty * it.price | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <button class="x sm" (click)="removeItem(i)" [disabled]="items().length === 1" aria-label="Remove">×</button>
+            </div>
+          }
+          <button class="btn sm ghost add" (click)="addItem()">+ Add item</button>
+        </div>
+
+        <div class="summary">
+          <div class="adj">
+            <label>Discount (₹)
+              <input type="number" min="0" [value]="discount()" (input)="discount.set(num($any($event.target).value))" />
+            </label>
+            <label>Tax (%)
+              <input type="number" min="0" max="100" [value]="taxPct()" (input)="taxPct.set(num($any($event.target).value))" />
+            </label>
+          </div>
+          <dl>
+            <div><dt>Subtotal</dt><dd>{{ draft().subtotal | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+            @if (draft().discount) { <div><dt>Discount</dt><dd>− {{ draft().discount | currency: 'INR':'symbol':'1.0-0' }}</dd></div> }
+            @if (draft().tax) { <div><dt>Tax</dt><dd>{{ draft().tax | currency: 'INR':'symbol':'1.0-0' }}</dd></div> }
+            <div class="grand"><dt>Total</dt><dd>{{ draft().total | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <footer>
+        <button class="btn ghost" (click)="closeModal()">Cancel</button>
+        <button class="btn primary" (click)="save()">Create bill</button>
+      </footer>
+    </div>
+  </div>
+}
+
+<!-- ───────────── Collect payment ───────────── -->
+@if (modal() === 'pay' && target(); as b) {
+  @let t = totals(b);
+  <div class="overlay" (click)="closeModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <header><h2>Collect payment</h2><button class="x" (click)="closeModal()" aria-label="Close">×</button></header>
+      <div class="body">
+        <div class="pay-head">
+          <div><div class="pt">{{ b.patientName }}</div><div class="small">{{ b.number }}</div></div>
+          <div class="r"><div class="small">Balance due</div><strong class="due">{{ t.due | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+        </div>
+
+        <label>Amount
+          <input type="number" min="1" [max]="t.due" [value]="payAmount()" (input)="payAmount.set(num($any($event.target).value))" />
+        </label>
+
+        <div class="modes">
+          @for (m of modes; track m.key) {
+            <button class="chip" [class.on]="payMode() === m.key" (click)="payMode.set(m.key)">{{ m.label }}</button>
+          }
+        </div>
+      </div>
+      <footer>
+        <button class="btn ghost" (click)="closeModal()">Cancel</button>
+        <button class="btn primary" (click)="submitPay()" [disabled]="payAmount() <= 0">Save payment</button>
+      </footer>
+    </div>
+  </div>
+}
+
+<!-- ───────────── Invoice detail ───────────── -->
+@if (modal() === 'view' && target(); as b) {
+  @let t = totals(b);
+  <div class="overlay" (click)="closeModal()">
+    <div class="modal wide" (click)="$event.stopPropagation()">
+      <header>
+        <h2>{{ b.number }} <span class="badge {{ b.status }}">{{ label[b.status] }}</span></h2>
+        <button class="x" (click)="closeModal()" aria-label="Close">×</button>
+      </header>
+      <div class="body">
+        <div class="pay-head">
+          <div><div class="pt">{{ b.patientName }}</div><div class="small">{{ b.phone || 'No phone' }}</div></div>
+          <div class="r small">{{ b.createdAt | date: 'dd MMM yyyy, hh:mm a' }}</div>
+        </div>
+
+        <table class="mini">
+          <thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead>
+          <tbody>
+            @for (it of b.items; track $index) {
+              <tr>
+                <td>{{ it.description }}</td><td class="r">{{ it.qty }}</td>
+                <td class="r">{{ it.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td class="r">{{ it.qty * it.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <dl class="totals">
+          <div><dt>Subtotal</dt><dd>{{ t.subtotal | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+          @if (t.discount) { <div><dt>Discount</dt><dd>− {{ t.discount | currency: 'INR':'symbol':'1.0-0' }}</dd></div> }
+          @if (t.tax) { <div><dt>Tax ({{ b.taxPct }}%)</dt><dd>{{ t.tax | currency: 'INR':'symbol':'1.0-0' }}</dd></div> }
+          <div class="grand"><dt>Total</dt><dd>{{ t.total | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+          <div><dt>Paid</dt><dd>{{ t.paid | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+          <div><dt>Due</dt><dd [class.due]="t.due > 0">{{ t.due | currency: 'INR':'symbol':'1.0-0' }}</dd></div>
+        </dl>
+
+        @if (b.payments.length) {
+          <h3>Payments</h3>
+          <ul class="pays">
+            @for (p of b.payments; track $index) {
+              <li><span>{{ p.at | date: 'dd MMM, hh:mm a' }} · {{ p.mode }}</span><strong>{{ p.amount | currency: 'INR':'symbol':'1.0-0' }}</strong></li>
+            }
+          </ul>
+        }
+      </div>
+      <footer>
+        @if (b.status !== 'cancelled' && b.status !== 'paid') {
+          <button class="btn danger" (click)="cancel(b)">Cancel bill</button>
+        }
+        @if (canPay(b)) { <button class="btn primary" (click)="openPay(b)">Collect payment</button> }
+        <button class="btn ghost" (click)="closeModal()">Close</button>
+      </footer>
+    </div>
+  </div>
+}
+
+@if (toast()) { <div class="toast" role="status">{{ toast() }}</div> }

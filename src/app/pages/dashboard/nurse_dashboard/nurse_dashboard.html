@@ -1,0 +1,136 @@
+<section class="dash">
+  <header class="dash__head">
+    <div>
+      <h1>Nurse dashboard</h1>
+      @if (data(); as d) {
+        <p class="muted">{{ d.nurseName }} · {{ d.clinicName }} · {{ today | date: 'EEE, d MMM' }}</p>
+      }
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="state state--error" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn" (click)="load()">Try again</button>
+    </div>
+  } @else if (loading() && !data()) {
+    <div class="state" aria-live="polite">Loading today’s clinic…</div>
+  } @else if (data(); as d) {
+
+    <div class="kpis">
+      @for (k of kpis(); track k.label) {
+        <div class="kpi" [attr.data-tone]="k.tone"><span>{{ k.label }}</span><strong>{{ k.value }}</strong></div>
+      }
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+      @for (t of tabs; track t.key) {
+        <button type="button" role="tab" class="tab" [class.tab--active]="tab() === t.key"
+                [attr.aria-selected]="tab() === t.key" (click)="tab.set(t.key)">{{ t.label }}</button>
+      }
+    </nav>
+
+    @switch (tab()) {
+
+      @case ('queue') {
+        <div class="tools">
+          <label class="sr-only" for="q">Search</label>
+          <input id="q" type="search" placeholder="Search name, token or reason"
+                 [ngModel]="search()" (ngModelChange)="search.set($event)">
+        </div>
+        <div class="queue">
+          @for (e of queue(); track e.id) {
+            <article class="qc" [class.qc--done]="e.status === 'Done'">
+              <div class="qc__token">{{ e.token }}</div>
+              <div class="qc__main">
+                <div class="qc__top">
+                  <h3>{{ e.patientName }}</h3>
+                  <span class="tag" [attr.data-s]="e.status">{{ e.status }}</span>
+                  @if (e.source === 'Walk-in') { <span class="chip">Walk-in</span> }
+                </div>
+                <p class="muted">{{ e.age }}{{ e.gender }} · {{ e.reason }} · {{ e.doctorName }}</p>
+                @if (e.status === 'Waiting') {
+                  <p class="muted wait">Waiting {{ waitMinutes(e) }} min</p>
+                }
+                @if (e.vitals; as v) {
+                  <div class="vitals">
+                    <div><small>Temp</small><b>{{ v.temperatureC }}°C</b></div>
+                    <div><small>Pulse</small><b>{{ v.pulse }}</b></div>
+                    <div><small>BP</small><b>{{ v.systolic }}/{{ v.diastolic }}</b></div>
+                    <div><small>SpO₂</small><b>{{ v.spo2 }}%</b></div>
+                    <div><small>Weight</small><b>{{ v.weightKg }} kg</b></div>
+                  </div>
+                  @if (vitalFlags(v).length) {
+                    <p class="flags">Out of range: {{ vitalFlags(v).join(', ') }}</p>
+                  }
+                } @else {
+                  <p class="muted">Vitals not recorded yet</p>
+                }
+              </div>
+            </article>
+          } @empty {
+            <p class="empty">No patients match. Clear the search.</p>
+          }
+        </div>
+      }
+
+      @case ('procedures') {
+        <div class="panel"><div class="table-wrap"><table>
+          <thead><tr><th>Time</th><th>Patient</th><th>Procedure</th><th>Details</th><th>By</th></tr></thead>
+          <tbody>
+            @for (p of d.procedures; track p.id) {
+              <tr><td>{{ p.doneAt | date: 'h:mm a' }}</td><td>{{ p.patientName }}</td>
+                  <td><span class="tag" data-s="Info">{{ p.type }}</span></td><td>{{ p.detail }}</td><td>{{ p.doneBy }}</td></tr>
+            } @empty {
+              <tr><td colspan="5" class="empty">No procedures today.</td></tr>
+            }
+          </tbody>
+        </table></div></div>
+      }
+
+      @case ('followUps') {
+        <div class="panel"><div class="table-wrap"><table>
+          <thead><tr><th>Patient</th><th>Phone</th><th>Reason</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody>
+            @for (f of d.followUps; track f.id) {
+              <tr><td>{{ f.patientName }}</td><td>{{ f.phone }}</td><td>{{ f.reason }}</td>
+                  <td>{{ f.dueDate | date: 'd MMM' }}</td>
+                  <td><span class="tag" [attr.data-s]="f.status">{{ f.status }}</span></td></tr>
+            } @empty {
+              <tr><td colspan="5" class="empty">No follow-up calls.</td></tr>
+            }
+          </tbody>
+        </table></div></div>
+      }
+
+      @case ('tasks') {
+        <div class="two">
+          <div>
+            <h3 class="sec">Clinic tasks</h3>
+            <ul class="tasks">
+              @for (t of d.tasks; track t.id) {
+                <li [class.done]="t.done">
+                  <span class="mark" aria-hidden="true">{{ t.done ? '✓' : '' }}</span>
+                  <span>{{ t.title }}</span>
+                  <span class="sr-only">{{ t.done ? 'Done' : 'Not done' }}</span>
+                </li>
+              } @empty {
+                <li class="empty">No tasks.</li>
+              }
+            </ul>
+          </div>
+          <div>
+            <h3 class="sec">Notes</h3>
+            <ul class="notes">
+              @for (n of d.notes; track n.id) {
+                <li><p>{{ n.text }}</p><small class="muted">{{ n.author }} · {{ n.createdAt | date: 'd MMM, h:mm a' }}</small></li>
+              } @empty {
+                <li class="empty">No notes.</li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+    }
+  }
+</section>

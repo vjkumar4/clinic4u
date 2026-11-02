@@ -1,62 +1,113 @@
-import { Injectable } from '@angular/core';
-import { Observable, of, delay } from 'rxjs';
-import { RangeKey,ReportData } from '../pages/reports/model/report.model';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable, delay, of } from 'rxjs';
+import {
+  Consultation, DiagnosisTrend, DoctorReport, FollowUp,
+  PatientVisit, Period, Prescription,
+} from '../pages/reports/model/report.model';
 
-/**
- * Static data for now. When the backend is ready:
- *   1) inject HttpClient (provideHttpClient() in app.config.ts)
- *   2) replace the body of getReport() with the http call shown below.
- * The component does not change - it only depends on the ReportData shape.
- */
+/** Set to false once the backend endpoint exists. */
+const USE_MOCK = true;
+const API = '/api/doctors/me/report'; // "me" = doctor from the auth token, so only own data is returned
+
 @Injectable({ providedIn: 'root' })
-export class ReportsService {
-  // private http = inject(HttpClient);
+export class DoctorReportService {
+  private readonly http = inject(HttpClient);
 
-  getReport(range: RangeKey): Observable<ReportData> {
-    // return this.http.get<ReportData>(`${environment.apiUrl}/reports/overview`, { params: { range } });
-    return of(this.mock(range)).pipe(delay(600));
+  getMyReport(period: Period): Observable<DoctorReport> {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - period + 1);
+
+    if (USE_MOCK) {
+      return of(this.mock(period, from, to)).pipe(delay(300));
+    }
+    const params = new HttpParams()
+      .set('from', from.toISOString())
+      .set('to', to.toISOString());
+    return this.http.get<DoctorReport>(API, { params });
   }
 
-  private mock(range: RangeKey): ReportData {
-    const week = range === '7d';
+  // ---------- mock data (remove when API is ready) ----------
+  private mock(period: Period, from: Date, to: Date): DoctorReport {
+    let s = 11;
+    const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
+    const day = () => {
+      const d = new Date(to);
+      d.setDate(d.getDate() - Math.floor(r() * period));
+      return d.toISOString();
+    };
+    const names = ['Priya S', 'Rahul K', 'Meena V', 'Arjun R', 'Lakshmi N', 'Suresh P',
+      'Divya M', 'Karan T', 'Fatima A', 'Vikram J', 'Nisha B', 'Ganesh L'];
+    const reasons = ['Fever', 'BP check', 'Sugar review', 'Cough', 'Headache', 'Joint pain'];
+
+    const consultations: Consultation[] = Array.from({ length: 24 }, (_, i) => ({
+      id: 'C' + (100 + i),
+      patientName: pick(names),
+      date: day(),
+      mode: pick(['In-person', 'Video', 'Phone'] as const),
+      durationMin: 10 + Math.floor(r() * 25),
+      reason: pick(reasons),
+      status: pick(['Completed', 'Completed', 'Completed', 'Scheduled', 'Cancelled'] as const),
+    }));
+
+    const visits: PatientVisit[] = Array.from({ length: 30 }, (_, i) => ({
+      id: 'V' + (200 + i),
+      patientName: pick(names),
+      age: 18 + Math.floor(r() * 62),
+      gender: pick(['F', 'M', 'O'] as const),
+      visitDate: day(),
+      type: pick(['New', 'Revisit', 'Revisit'] as const),
+      department: 'General Medicine',
+    }));
+
+    const trendLabels = period === 7
+      ? ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7']
+      : ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4'];
+    const dx: [string, string][] = [
+      ['Hypertension', 'I10'], ['Type 2 diabetes', 'E11'], ['Viral fever', 'B34.9'],
+      ['Asthma', 'J45'], ['Migraine', 'G43'],
+    ];
+    const diagnosisTrends: DiagnosisTrend[] = dx.map(([diagnosis, icdCode]) => {
+      const counts = trendLabels.map(() => Math.floor(r() * 9));
+      return {
+        diagnosis, icdCode, counts,
+        total: counts.reduce((a, b) => a + b, 0),
+        changePct: Math.round((r() - 0.4) * 60),
+      };
+    });
+
+    const meds = [['Amlodipine', '5 mg'], ['Metformin', '500 mg'], ['Paracetamol', '650 mg'],
+      ['Salbutamol', '2 puffs'], ['Cetirizine', '10 mg']];
+    const prescriptions: Prescription[] = Array.from({ length: 18 }, (_, i) => ({
+      id: 'P' + (300 + i),
+      patientName: pick(names),
+      date: day(),
+      medicines: Array.from({ length: 1 + Math.floor(r() * 3) }, () => {
+        const [name, dosage] = pick(meds);
+        return { name, dosage, days: pick([3, 5, 7, 14, 30]) };
+      }),
+      status: pick(['Active', 'Active', 'Completed'] as const),
+    }));
+
+    const followUps: FollowUp[] = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(to);
+      d.setDate(d.getDate() + Math.floor(r() * 14) - 5);
+      const overdue = d < to;
+      return {
+        id: 'F' + (400 + i),
+        patientName: pick(names),
+        dueDate: d.toISOString(),
+        reason: pick(['Review reports', 'BP recheck', 'Medication review', 'Wound check']),
+        status: overdue ? pick(['Overdue', 'Done'] as const) : 'Pending',
+      } as FollowUp;
+    });
+
     return {
-      rangeLabel: week ? '04 Oct – 10 Oct 2026' : '11 Sep – 10 Oct 2026',
-      kpis: [
-        { key: 'patients', label: 'Total patients', value: week ? '248' : '1,036', change: 12, tone: 'green', spark: [10, 21, 26, 37, 32, 40, 53, 41, 54, 63] },
-        { key: 'appointments', label: 'Appointments', value: week ? '210' : '884', change: 8, tone: 'blue', spark: [20, 18, 25, 30, 28, 35, 33, 40, 38, 45] },
-        { key: 'revenue', label: 'Revenue', value: week ? '₹ 1,28,450' : '₹ 5,42,900', change: 15, tone: 'purple', spark: [12, 15, 14, 22, 25, 24, 30, 33, 38, 42] },
-        { key: 'wait', label: 'Avg. wait time', value: '18 mins', change: -32, tone: 'orange', lowerIsBetter: true, spark: [40, 38, 35, 33, 30, 28, 26, 22, 20, 18] }
-      ],
-      trend: {
-        labels: ['01 Oct', '02 Oct', '03 Oct', '04 Oct', '05 Oct', '06 Oct', '07 Oct', '08 Oct', '09 Oct', '10 Oct'],
-        values: week ? [10, 21, 26, 37, 32, 40, 53, 41, 54, 63] : [22, 31, 28, 45, 39, 52, 61, 48, 66, 72]
-      },
-      doctors: [
-        { name: 'Dr. Arun', specialty: 'General Physician', visits: 68, color: '#10b981' },
-        { name: 'Dr. Priya', specialty: 'General Physician', visits: 56, color: '#3b82f6' },
-        { name: 'Dr. Ravi', specialty: 'Cardiologist', visits: 48, color: '#8b5cf6' },
-        { name: 'Dr. Meena', specialty: 'Pediatrician', visits: 42, color: '#f59e0b' },
-        { name: 'Dr. Karthik', specialty: 'Orthopedic', visits: 34, color: '#f43f5e' }
-      ],
-      gender: [
-        { label: 'Male', count: 138, color: '#3b82f6' },
-        { label: 'Female', count: 110, color: '#a855f7' }
-      ],
-      ageGroups: [
-        { label: '0–18', count: 18 }, { label: '19–30', count: 52 }, { label: '31–50', count: 94 },
-        { label: '51–70', count: 62 }, { label: '71+', count: 22 }
-      ],
-      reasons: [
-        { label: 'Fever', count: 42, color: '#10b981' }, { label: 'Cough & cold', count: 36, color: '#3b82f6' },
-        { label: 'Hypertension', count: 28, color: '#8b5cf6' }, { label: 'Diabetes follow-up', count: 24, color: '#f59e0b' },
-        { label: 'Back pain', count: 20, color: '#f43f5e' }, { label: 'Others', count: 98, color: '#94a3b8' }
-      ],
-      recent: [
-        { at: '10 Oct, 09:45 AM', patient: 'Ramesh Kumar', mrn: 'PT-0005', doctor: 'Dr. Priya', reason: 'Fever & cold', status: 'In Consultation' },
-        { at: '10 Oct, 09:20 AM', patient: 'Lakshmi Devi', mrn: 'PT-0006', doctor: 'Dr. Arun', reason: 'Checkup', status: 'Completed' },
-        { at: '10 Oct, 09:05 AM', patient: 'Karthik S', mrn: 'PT-0007', doctor: 'Dr. Meena', reason: 'Body pain', status: 'Ready for Doctor' },
-        { at: '10 Oct, 08:40 AM', patient: 'Divya S', mrn: 'PT-0010', doctor: 'Dr. Ravi', reason: 'Cough', status: 'Waiting for Vitals' }
-      ]
+      doctorId: 'DR101', doctorName: 'Dr. Anitha Raman',
+      from: from.toISOString(), to: to.toISOString(),
+      trendLabels, consultations, visits, diagnosisTrends, prescriptions, followUps,
     };
   }
 }

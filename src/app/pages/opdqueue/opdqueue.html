@@ -1,11 +1,15 @@
+@if (notLinked()) {
+  <div class="banner" role="alert">
+    Your account is not linked to a doctor profile yet. Ask the admin to link it.
+  </div>
+}
 <div class="wrap">
 
   <header class="top">
-    <div><h1>OPD Queue</h1><p>Check in, triage and call patients in order. Today, {{ now() | date: 'EEEE, d MMMM' }}.</p></div>
-    <div class="top-actions">
-      @if (!opd.today().length) { <button type="button" class="btn ghost" (click)="opd.loadSamples()">Load sample data</button> }
-      <button type="button" class="btn primary" (click)="openCheckIn()"><span>+</span>Check in patient</button>
-    </div>
+    <h1>OPD Queue</h1>
+    @if (caps().checkIn) {
+      <button type="button" class="btn primary" (click)="openCheckIn()">Check in patient</button>
+    }
   </header>
 
   <section class="stats">
@@ -19,70 +23,105 @@
     @for (d of desks(); track d.id; let i = $index) {
       <article class="desk" [class.live]="d.current" [style.--i]="i">
         <div class="desk-top">
-          <span class="initial">{{ d.id }}</span>
+          <!-- <span class="initial">{{ d.id }}</span> -->
           <div><strong>{{ d.name }}</strong><small>{{ d.dept }}</small></div>
           <span class="queued">{{ d.queued }} in queue</span>
         </div>
         <div class="serving">
           @if (d.current; as c) {
             <small>Now serving</small><b>{{ c.token }}</b><span>{{ c.name }}</span>
-          } @else { <small>Now serving</small><b class="free">Free</b><span>{{ d.next ? 'Next: ' + d.next.token : 'No one waiting' }}</span> }
+          } @else {
+            <small>Now serving</small><b class="free">Free</b><span>{{ d.next ? 'Next: ' + d.next.token : 'No one waiting' }}</span>
+          }
         </div>
         <div class="desk-act">
-          @if (d.current; as c) { <button type="button" class="btn small primary" (click)="openComplete(c)">Complete visit</button> }
-          @else { <button type="button" class="btn small primary" [disabled]="!d.readyCount" (click)="callNext(d.id)">Call next <i>→</i></button> }
+          @if (d.current; as c) {
+            @if (can(c, 'complete')) {
+              <button type="button" class="btn small primary" (click)="openComplete(c)">Complete visit</button>
+            }
+          } @else if (caps().callNext) {
+            <button type="button" class="btn small primary" [disabled]="!d.readyCount" (click)="callNext(d.id)">Call next <i>→</i></button>
+          }
         </div>
       </article>
     }
   </section>
 
-  <div class="filter">
-    <button type="button" [class.on]="doctorFilter() === 'all'" (click)="doctorFilter.set('all')">All doctors</button>
-    @for (d of doctors; track d.id) { <button type="button" [class.on]="doctorFilter() === d.id" (click)="doctorFilter.set(d.id)">{{ d.name }}</button> }
-  </div>
+  <!-- Doctor filter: hidden for doctors, who are locked to their own queue -->
+  @if (caps().pickDoctor) {
+    <div class="filter">
+      <button type="button" [class.on]="doctorFilter() === 'all'" (click)="doctorFilter.set('all')">All doctors</button>
+      @for (d of doctors; track d.id) {
+        <button type="button" [class.on]="doctorFilter() === d.id" (click)="doctorFilter.set(d.id)">{{ d.name }}</button>
+      }
+    </div>
+  }
 
   <!-- Board -->
   <section class="board">
     @for (c of columns; track c.key; let ci = $index) {
-      <div class="col" [style.--i]="ci">
-        <header><span [class]="'cdot ' + c.key"></span><h3>{{ c.title }}</h3><small>{{ c.hint }}</small><b>{{ board()[c.key].length }}</b></header>
-        <div class="col-body">
-          @for (v of board()[c.key]; track v.id; let i = $index) {
-            <article [class]="'visit ' + v.priority" [style.--i]="i">
-              <div class="v-top">
-                <span class="token">{{ v.token }}</span>
-                @if (v.priority !== 'normal') { <span class="prio">{{ v.priority }}</span> }
-                <span class="wait" [class.late]="wait(v) > 30">{{ wait(v) }} min</span>
-              </div>
-              <strong>{{ v.name }}</strong>
-              <small>{{ v.age ?? '—' }} yrs · {{ v.gender || '—' }} · {{ doctor(v).name }}</small>
-              <p>{{ v.reason }}</p>
-              @if (v.vitals; as t) {
-                <div class="vit"><span>BP {{ t.sys ?? '—' }}/{{ t.dia ?? '—' }}</span><span>HR {{ t.pulse ?? '—' }}</span><span>SpO₂ {{ t.spo2 ?? '—' }}%</span><span>{{ t.temp ?? '—' }}°F</span></div>
-              }
-              <div class="v-act">
-                @switch (v.status) {
-                  @case ('waiting') {
-                    <button type="button" class="btn small primary" (click)="opd.startVitals(v.id)">Start vitals</button>
-                    @if (v.priority === 'emergency') { <button type="button" class="btn small danger solid" (click)="opd.fastTrack(v.id)">Fast-track</button> }
-                    <button type="button" class="btn small ghost" (click)="cancel(v)">Cancel</button>
-                  }
-                  @case ('vitals') {
-                    <button type="button" class="btn small primary" (click)="openVitals(v)">Record vitals</button>
-                    <button type="button" class="btn small ghost" (click)="cancel(v)">Cancel</button>
-                  }
-                  @case ('ready') {
-                    <button type="button" class="btn small primary" [disabled]="opd.busy(v.doctorId)" (click)="callNext(v.doctorId)">
-                      {{ opd.busy(v.doctorId) ? 'Doctor busy' : 'Call in' }}
-                    </button>
-                    <button type="button" class="btn small ghost" (click)="cancel(v)">No-show</button>
-                  }
-                  @case ('consult') { <button type="button" class="btn small primary" (click)="openComplete(v)">Complete</button> }
+      <div class="col" [class.collapsed]="!isOpen(c.key)" [style.--i]="ci">
+        <header (click)="toggleColumn(c.key)" (keydown.enter)="toggleColumn(c.key)" tabindex="0" role="button" [attr.aria-expanded]="isOpen(c.key)">
+          <span [class]="'cdot ' + c.key"></span><h3>{{ c.title }}</h3><small>{{ c.hint }}</small><b>{{ board()[c.key].length }}</b>
+        </header>
+
+        @if (isOpen(c.key)) {
+          <div class="col-body">
+            @for (v of board()[c.key]; track v.id; let i = $index) {
+              <article [class]="'visit ' + v.priority" [style.--i]="i">
+                <div class="v-top">
+                  <span class="token">{{ v.token }}</span>
+                  @if (v.priority !== 'normal') { <span class="prio">{{ v.priority }}</span> }
+                  <span class="wait" [class.late]="wait(v) > 30">{{ wait(v) }} min</span>
+                </div>
+                <strong>{{ v.name }}</strong>
+                <small>{{ v.age ?? '—' }} yrs · {{ v.gender || '—' }} · {{ doctor(v).name }}</small>
+                <p>{{ v.reason }}</p>
+                @if (v.vitals; as t) {
+                  <div class="vit"><span>BP {{ t.sys ?? '—' }}/{{ t.dia ?? '—' }}</span><span>HR {{ t.pulse ?? '—' }}</span><span>SpO₂ {{ t.spo2 ?? '—' }}%</span><span>{{ t.temp ?? '—' }}°F</span></div>
                 }
-              </div>
-            </article>
-          } @empty { <p class="none">No patients</p> }
-        </div>
+                <div class="v-act">
+                  @switch (v.status) {
+                    @case ('waiting') {
+                      @if (can(v, 'startVitals')) {
+                        <button type="button" class="btn small primary" (click)="startVitals(v)">Start vitals</button>
+                        @if (v.priority === 'emergency') {
+                          <button type="button" class="btn small danger solid" (click)="fastTrack(v)">Fast-track</button>
+                        }
+                      }
+                      @if (can(v, 'cancel')) {
+                        <button type="button" class="btn small ghost" (click)="cancel(v)">Cancel</button>
+                      }
+                    }
+                    @case ('vitals') {
+                      @if (can(v, 'finishVitals')) {
+                        <button type="button" class="btn small primary" (click)="openVitals(v)">Record vitals</button>
+                      }
+                      @if (can(v, 'cancel')) {
+                        <button type="button" class="btn small ghost" (click)="cancel(v)">Cancel</button>
+                      }
+                    }
+                    @case ('ready') {
+                      @if (caps().callNext) {
+                        <button type="button" class="btn small primary" [disabled]="opd.busy(v.doctorId)" (click)="callNext(v.doctorId)">
+                          {{ opd.busy(v.doctorId) ? 'Doctor busy' : 'Call in' }}
+                        </button>
+                      }
+                      @if (can(v, 'cancel')) {
+                        <button type="button" class="btn small ghost" (click)="cancel(v)">No-show</button>
+                      }
+                    }
+                    @case ('consult') {
+                      @if (can(v, 'complete')) {
+                        <button type="button" class="btn small primary" (click)="openComplete(v)">Complete</button>
+                      }
+                    }
+                  }
+                </div>
+              </article>
+            } @empty { <p class="none">No patients</p> }
+          </div>
+        }
       </div>
     }
   </section>
@@ -133,8 +172,9 @@
                 <div class="sum-top"><span class="avatar">{{ initials(p) }}</span>
                   <div><strong>{{ name(p) }}</strong><small>{{ p.id }} · {{ age(p) ?? '—' }} yrs · {{ p.gender || '—' }} · {{ p.bloodGroup || 'Blood group —' }}</small></div></div>
                 <dl>
-                  <div><dt>Mobile</dt><dd>{{ p.phone || '—' }}</dd></div><div><dt>Email</dt><dd>{{ p.email || '—' }}</dd></div>
-                 <div><dt>Address</dt><dd>{{ fullAddress(p) || '—' }}</dd></div>
+                  <div><dt>Mobile</dt><dd>{{ p.phone || '—' }}</dd></div>
+                  <div><dt>Email</dt><dd>{{ p.email || '—' }}</dd></div>
+                  <div><dt>Address</dt><dd>{{ fullAddress(p) || '—' }}</dd></div>
                   <div><dt>Emergency contact</dt><dd>{{ p.ecName || '—' }} {{ p.ecRelation ? '(' + p.ecRelation + ')' : '' }} {{ p.ecPhone }}</dd></div>
                   <div><dt>Insurance</dt><dd>{{ p.insurer || '—' }} {{ p.policy }}</dd></div>
                   <div><dt>Medications</dt><dd>{{ p.medications || '—' }}</dd></div>
@@ -193,32 +233,26 @@
             }
           }
 
-          <!-- <h4 class="sec visit">Today's visit</h4>
-          <div class="g2">
-            <label>Doctor<em>*</em><select class="in" formControlName="doctorId">@for (d of doctors; track d.id) { <option [value]="d.id">{{ d.name }} · {{ d.dept }}</option> }</select></label>
-            <label>Priority<select class="in" formControlName="priority">@for (p of priorities; track p.v) { <option [value]="p.v">{{ p.label }}</option> }</select></label>
-            <label class="span2">Reason for visit<em>*</em><input class="in" formControlName="reason" placeholder="Fever, check-up, follow-up..." [class.bad]="regForm.controls.reason.touched && regForm.controls.reason.invalid" /></label>
-          </div> -->
           <h4 class="sec today">Today's visit</h4>
-<div class="g2">
-  <label>
-    <span class="lbl">Doctor<em>*</em></span>
-    <select class="in" formControlName="doctorId">
-      @for (d of doctors; track d.id) { <option [value]="d.id">{{ d.name }} · {{ d.dept }}</option> }
-    </select>
-  </label>
-  <label>
-    <span class="lbl">Priority</span>
-    <select class="in" formControlName="priority">
-      @for (p of priorities; track p.v) { <option [value]="p.v">{{ p.label }}</option> }
-    </select>
-  </label>
-  <label class="span2">
-    <span class="lbl">Reason for visit<em>*</em></span>
-    <input class="in" formControlName="reason" placeholder="Fever, check-up, follow-up..."
-           [class.bad]="regForm.controls.reason.touched && regForm.controls.reason.invalid" />
-  </label>
-</div>
+          <div class="g2">
+            <label>
+              <span class="lbl">Doctor<em>*</em></span>
+              <select class="in" formControlName="doctorId">
+                @for (d of doctors; track d.id) { <option [value]="d.id">{{ d.name }} · {{ d.dept }}</option> }
+              </select>
+            </label>
+            <label>
+              <span class="lbl">Priority</span>
+              <select class="in" formControlName="priority">
+                @for (p of priorities; track p.v) { <option [value]="p.v">{{ p.label }}</option> }
+              </select>
+            </label>
+            <label class="span2">
+              <span class="lbl">Reason for visit<em>*</em></span>
+              <input class="in" formControlName="reason" placeholder="Fever, check-up, follow-up..."
+                     [class.bad]="regForm.controls.reason.touched && regForm.controls.reason.invalid" />
+            </label>
+          </div>
         </div>
         <footer class="m-foot">
           <button type="button" class="btn ghost" (click)="closeModal()">Cancel</button>

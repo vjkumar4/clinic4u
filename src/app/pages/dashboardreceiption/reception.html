@@ -1,0 +1,248 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-users" viewBox="0 0 24 24"><path pathLength="1" d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path pathLength="1" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path pathLength="1" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><path pathLength="1" d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4 12 14l-3-3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path pathLength="1" d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><path pathLength="1" d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-calendar-plus" viewBox="0 0 24 24"><path pathLength="1" d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 13v5M9.5 15.5h5"/></symbol>
+  <symbol id="i-calendar-check" viewBox="0 0 24 24"><path pathLength="1" d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 16l2 2 4-4"/></symbol>
+  <symbol id="i-stethoscope" viewBox="0 0 24 24"><path pathLength="1" d="M11 2v2M5 2v2M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1M8 15a6 6 0 0 0 12 0v-3M22 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path pathLength="1" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8M8 9h2"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path pathLength="1" d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path pathLength="1" d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path pathLength="1" d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path pathLength="1" d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path pathLength="1" d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path pathLength="1" d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+</svg>
+
+<section class="desk">
+  <!-- Greeting -->
+  <header class="hello">
+    <div class="who">
+      <svg class="sun" viewBox="0 0 48 48" aria-hidden="true">
+        <g class="rays"><path d="M24 3v6M24 39v6M3 24h6M39 24h6M9.2 9.2l4.2 4.2M34.6 34.6l4.2 4.2M9.2 38.8l4.2-4.2M34.6 13.4l4.2-4.2"/></g>
+        <circle cx="24" cy="24" r="9" />
+      </svg>
+      <div>
+        <h1>{{ greeting }}@if (user()) {, {{ user() }}} <span class="wave">👋</span></h1>
+        <p>Here's today's OPD overview.</p>
+      </div>
+    </div>
+    <div class="date">
+      <span class="date-ic"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg></span>
+      <div><b>{{ today | date: 'd MMM y' }}</b><small>{{ today | date: 'EEEE' }}</small></div>
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="banner" role="alert">
+      <span>We couldn't load today's visits. Check your connection and try again.</span>
+      <button class="act" data-v="blue" (click)="load()"><svg class="ic" aria-hidden="true"><use href="#i-refresh" /></svg> Retry</button>
+    </div>
+  }
+
+  <!-- Stat cards -->
+  <div class="stats">
+    @for (s of stats(); track s.key; let i = $index) {
+      <article class="stat" [attr.data-tone]="s.tone" [style.--i]="i">
+        <div class="bubble"><svg class="ic draw" aria-hidden="true"><use [attr.href]="'#i-' + s.icon" /></svg></div>
+        <strong>{{ shown(s.value) }}</strong>
+        <span class="lbl">{{ s.label }}</span>
+        <small>{{ s.sub }}</small>
+
+        @if (s.pct !== null) {
+          <svg class="mini-ring" viewBox="0 0 36 36" aria-hidden="true">
+            <circle class="rt" cx="18" cy="18" r="15" />
+            <circle class="ra" cx="18" cy="18" r="15" pathLength="100" [style.stroke-dasharray]="s.pct + ' 100'" />
+          </svg>
+        }
+        <svg class="beat" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 28H34l6-14 8 24 7-16 5 6h60" />
+        </svg>
+      </article>
+    }
+  </div>
+
+  <div class="cols">
+    <div class="left">
+      <!-- OPD queue -->
+      <section class="panel" id="queue">
+        <div class="panel-head">
+          <h2><svg class="ic h-ic" aria-hidden="true"><use href="#i-users" /></svg> Today's OPD Queue</h2>
+          <div class="head-r">
+            <label class="select">
+              <select (change)="setFilter($any($event.target).value)" aria-label="Filter by status">
+                @for (o of filterOptions; track o.key) { <option [value]="o.key">{{ o.label }}</option> }
+              </select>
+              <svg class="ic" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+            </label>
+            <button class="link" (click)="go(routes.queue)">View All <svg class="ic" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+          </div>
+        </div>
+
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Reg No</th><th>Patient Name</th><th>Age / Gender</th><th>Status</th><th>Next Step</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              @if (loading()) {
+                @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+                  <tr><td colspan="7"><div class="skeleton"></div></td></tr>
+                }
+              }
+              @for (v of pageRows(); track v.id; let i = $index) {
+                <tr [class.flash]="flash() === v.id">
+                  <td>{{ (currentPage() - 1) * pageSize + i + 1 }}</td>
+                  <td>{{ v.regNo }}</td>
+                  <td class="nm">{{ v.name }}</td>
+                  <td>{{ v.age }} / {{ v.gender }}</td>
+                  <td><span class="pill" [attr.data-s]="v.status"><i></i>{{ label(v.status) }}</span></td>
+                  <td>{{ nextStep(v.status) }}</td>
+                  <td>
+                    @if (step(v); as n) {
+                      <button class="act" [attr.data-v]="n.tone" (click)="advance(v)">
+                        <svg class="ic" aria-hidden="true"><use [attr.href]="'#i-' + n.icon" /></svg> {{ n.label }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                @if (!loading()) { <tr><td colspan="7" class="empty">No patients in this status.</td></tr> }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tfoot">
+          <span>Showing {{ shownFrom() }} - {{ shownTo() }} of {{ queue().length }} patients</span>
+          <nav class="pager" aria-label="Queue pages">
+            <button [disabled]="currentPage() === 1" (click)="setPage(currentPage() - 1)" aria-label="Previous page">
+              <svg class="ic" aria-hidden="true"><use href="#i-chevron-left" /></svg>
+            </button>
+            @for (n of pageNums(); track n) {
+              <button [class.on]="n === currentPage()" (click)="setPage(n)">{{ n }}</button>
+            }
+            <button [disabled]="currentPage() === pages()" (click)="setPage(currentPage() + 1)" aria-label="Next page">
+              <svg class="ic" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+            </button>
+          </nav>
+        </div>
+      </section>
+
+      <!-- New registrations -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2><svg class="ic h-ic" aria-hidden="true"><use href="#i-user-plus" /></svg> Today's New Registrations</h2>
+          <button class="link" (click)="go(routes.register)">View All <svg class="ic" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Reg No</th><th>Patient Name</th><th>Age / Gender</th><th>Phone</th><th>Registration Time</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              @for (v of regs(); track v.id; let i = $index) {
+                <tr>
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ v.regNo }}</td>
+                  <td class="nm">{{ v.name }}</td>
+                  <td>{{ v.age }} / {{ v.gender }}</td>
+                  <td>{{ v.phone }}</td>
+                  <td>{{ v.registeredAt }}</td>
+                  <td><button class="act sm" (click)="go(routes.patient(v.id))">View</button></td>
+                </tr>
+              } @empty {
+                @if (!loading()) { <tr><td colspan="7" class="empty">No new registrations yet today.</td></tr> }
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <aside class="right">
+      <!-- Quick actions -->
+    <!-- Doctors: live token -->
+<section class="panel">
+  <div class="panel-head">
+    <h2><svg class="ic h-ic" aria-hidden="true"><use href="#i-stethoscope" /></svg> Doctors · Live Token</h2>
+    <span class="live"><i></i>Live</span>
+  </div>
+
+  <ul class="docs">
+    @for (d of doctors(); track d.id) {
+      <li [class.flash]="flashDoc().has(d.id)">
+        <span class="bubble" [attr.data-tone]="doctorTone(d.state)">
+          <svg class="ic" aria-hidden="true"><use href="#i-stethoscope" /></svg>
+        </span>
+        <div class="d-info">
+          <b>{{ d.name }}</b>
+          <small>{{ d.speciality }} · Room {{ d.room }}</small>
+        </div>
+        <div class="d-token">
+          @if (d.state === 'serving' && d.currentToken) {
+            <small>Now serving</small>
+            <strong>{{ d.currentToken }}</strong>
+          } @else {
+            <span class="dpill" [attr.data-state]="d.state">{{ doctorLabel(d.state) }}</span>
+          }
+        </div>
+        <div class="d-wait"><b>{{ d.waiting }}</b><small>waiting</small></div>
+      </li>
+    } @empty {
+      @if (!loading()) { <li class="empty-li">No doctors on duty.</li> }
+    }
+  </ul>
+
+  @if (lastLive(); as t) { <p class="upd">Updated {{ t | date: 'hh:mm:ss a' }}</p> }
+</section>
+<div class="colsapp">
+      <!-- Appointments -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2><svg class="ic h-ic" aria-hidden="true"><use href="#i-calendar" /></svg> Today's Appointments</h2>
+          <button class="link" (click)="go(routes.book)">View All <svg class="ic" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+        </div>
+        <ul class="list appts">
+          @for (v of appts(); track v.id) {
+            @let c = apptChip(v);
+            <li>
+              <time>{{ v.time }}</time>
+              <b>{{ v.name }}</b>
+              <span class="dr">{{ v.doctor }}</span>
+              <span class="end">
+                <span class="pill" [attr.data-s]="c.key">{{ c.label }}</span>
+                @if (v.status === 'booked') {
+                  <button class="chk" (click)="advance(v)" [attr.aria-label]="'Check in ' + v.name">
+                    <svg class="ic" aria-hidden="true"><use href="#i-check" /></svg>
+                  </button>
+                }
+              </span>
+            </li>
+          } @empty {
+            @if (!loading()) { <li class="empty-li">No appointments today.</li> }
+          }
+        </ul>
+      </section>
+
+      <!-- Recent activities -->
+      <section class="panel">
+        <div class="panel-head"><h2><svg class="ic h-ic" aria-hidden="true"><use href="#i-pulse" /></svg> Recent Activities</h2></div>
+        <ul class="list acts">
+          @for (a of activities(); track a.id) {
+            @let s = act(a.type);
+            <li>
+              <span class="bubble" [attr.data-tone]="s.tone"><svg class="ic" aria-hidden="true"><use [attr.href]="'#i-' + s.icon" /></svg></span>
+              <span><b>{{ a.title }}</b><small>{{ a.sub }}</small></span>
+              <time>{{ a.time }}</time>
+            </li>
+          }
+        </ul>
+      </section>
+      </div>
+    </aside>
+  </div>
+</section>
