@@ -18,7 +18,7 @@ export interface ConsultationDraft {
 export interface Diagnosis { code: string; name: string; primary: boolean; }
 export interface Prescription {
   id: string; name: string; dosage: string; frequency: string; days: number;
-  instructions: string; allergyConflict: boolean;
+  instructions: string; allergyConflict: boolean,note?: string;
 }
 export interface Investigation { code: string; name: string; price: number; status: 'Ordered' | 'Pending' | 'Resulted'; }
 export interface RecentVisit { date: string; doctor: string; type: string; summary?: string; }

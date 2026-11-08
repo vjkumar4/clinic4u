@@ -35,7 +35,7 @@
         <p>Add your first patient, or load a few sample records to preview this page.</p>
         <div class="empty-actions">
           <a routerLink="/patients/new" class="btn primary">Add patient</a>
-          <button type="button" class="btn ghost" (click)="store.loadSamples()">Load sample data</button>
+         <button class="btn ghost" (click)="store.refresh()">Reload</button>
         </div>
       </div>
     } @else if (!filtered().length) {

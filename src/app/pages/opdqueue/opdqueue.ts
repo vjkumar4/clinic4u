@@ -1,9 +1,9 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/Auth_service';
-import { Patient, PatientService } from '../../services/patient_service';
+import { NewPatient, Patient, PatientService } from '../../services/patient_service';
 import { DOCTORS, OpdService, OpdStatus, Priority, Visit } from '../../services/opd_service';
 import { capsFor, NO_CAPS } from './opdaccess/opd_access';
 import { CONDITIONS, GENDERS, PRIORITIES, REG_SECTIONS, buildRegForm, toPatientInfo } from './opdaccess/opd_form';
@@ -89,6 +89,7 @@ export class OpdComponent {
   pickError = signal(false);
   allergies = signal<string[]>([]);
   conditions = signal<string[]>([]);
+  saving = signal(false); // true while a new patient is being saved to the server
 
   regForm = buildRegForm(this.fb, DOCTORS[0].id);
   vitalsForm = this.fb.group({
@@ -146,10 +147,17 @@ export class OpdComponent {
     const timer = setInterval(() => this.now.set(Date.now()), 30000);
     inject(DestroyRef).onDestroy(() => { clearInterval(timer); clearTimeout(this.toastTimer); });
 
-    // arriving from the Patients page: /opd?patient=P-10001 opens check-in with that patient picked
+    // arriving from the Patients page: /opd?patient=P-10001 opens check-in with that patient picked.
+    // The patient list now loads from the API, so wait until it arrives instead of reading it once.
     const id = inject(ActivatedRoute).snapshot.queryParamMap.get('patient');
-    const p = id ? this.patients.patients().find(x => x.id === id) : null;
-    if (p && this.caps().checkIn) { this.openCheckIn('existing'); this.pick(p); }
+    if (id && this.caps().checkIn) {
+      const ref = effect(() => {
+        const p = this.patients.patients().find(x => x.id === id);
+        if (!p) return;
+        untracked(() => { this.openCheckIn('existing'); this.pick(p); });
+        ref.destroy();
+      });
+    }
   }
 
   // ── helpers used by the template ───────────────────────────
@@ -185,6 +193,7 @@ export class OpdComponent {
     if (!this.guard(this.caps().checkIn)) return;
     this.regForm.reset({ doctorId: this.doctors[0].id, priority: 'normal', consent: false });
     this.allergies.set([]); this.conditions.set([]);
+    this.saving.set(false);
     this.mode.set(mode); this.search.set(''); this.picked.set(null); this.pickError.set(false);
     this.modal.set('checkin');
   }
@@ -211,6 +220,8 @@ export class OpdComponent {
 
   submitCheckIn() {
     if (!this.guard(this.caps().checkIn)) return;
+    if (this.saving()) return; // ignore double clicks while saving
+
     const f = this.regForm;
     f.get('doctorId')!.markAsTouched();
     f.get('reason')!.markAsTouched();
@@ -221,9 +232,32 @@ export class OpdComponent {
       return;
     }
 
-    const who = this.mode() === 'existing' ? this.pickedIdentity() : this.registerNewPatient();
-    if (!who) return;
+    // Existing patient: nothing to save, check in right away
+    if (this.mode() === 'existing') {
+      const who = this.pickedIdentity();
+      if (who) this.completeCheckIn(who, false);
+      return;
+    }
 
+    // New patient: save first, then check in with the server's id
+    const info = this.newPatientInfo();
+    if (!info) return;
+
+    this.saving.set(true);
+    this.patients.add$(info).subscribe({
+      next: (saved) => {
+        this.saving.set(false);
+        this.completeCheckIn(this.identity(saved), true);
+      },
+      error: (e: Error) => {
+        this.saving.set(false);
+        this.say(e.message); // modal stays open so nothing is lost
+      },
+    });
+  }
+
+  private completeCheckIn(who: Identity, isNew: boolean) {
+    const f = this.regForm;
     const v = this.opd.checkIn({
       ...who,
       doctorId: f.value.doctorId!,
@@ -231,26 +265,28 @@ export class OpdComponent {
       priority: f.value.priority as Priority,
     });
     this.closeModal();
-    this.say(`${this.mode() === 'new' ? `Patient saved (${who.patientId}). ` : ''}Token ${v.token} issued to ${v.name}`);
+    this.say(`${isNew ? `Patient saved (${who.patientId}). ` : ''}Token ${v.token} issued to ${v.name}`);
   }
 
   private identity(p: Patient): Identity {
     return { patientId: p.id, name: this.name(p), age: this.age(p), gender: p.gender, phone: p.phone };
   }
+
   private pickedIdentity(): Identity | null {
     const p = this.picked();
     if (!p) { this.pickError.set(true); return null; }
     return this.identity(p);
   }
-  private registerNewPatient(): Identity | null {
+
+  /** Builds the new-patient data from the form, or null if the form is invalid. */
+  private newPatientInfo(): NewPatient | null {
     const f = this.regForm;
     if (f.invalid) {
       f.markAllAsTouched();
       setTimeout(() => document.querySelector('.modal .invalid')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
       return null;
     }
-    const saved = this.patients.add({ ...toPatientInfo(f.getRawValue()), allergies: this.allergies(), conditions: this.conditions() });
-    return this.identity(saved);
+    return { ...toPatientInfo(f.getRawValue()), allergies: this.allergies(), conditions: this.conditions() };
   }
 
   // ── nurse ──────────────────────────────────────────────────

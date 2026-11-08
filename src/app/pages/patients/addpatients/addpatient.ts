@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NewPatient, PatientService } from '../../../services/patient_service';
 
 type Field = { key: string; label?: string; kind?: 'select' | 'textarea' | 'custom'; type?: string; ph?: string; opts?: string[]; span?: boolean; unit?: string; req?: boolean };
 
@@ -17,6 +18,7 @@ const phone = Validators.pattern(/^[0-9+\-\s]{7,15}$/);
 })
 export class PatientFormComponent {
   private fb = inject(FormBuilder);
+  private patientService = inject(PatientService);
 
   form = this.fb.nonNullable.group({
     personal: this.fb.nonNullable.group({
@@ -72,6 +74,7 @@ export class PatientFormComponent {
   loading = signal(false);
   done = signal(false);
   patientId = signal('');
+  errorMsg = signal<string | null>(null);
   allergies = signal<string[]>([]);
   conditions = signal<string[]>([]);
 
@@ -115,28 +118,52 @@ export class PatientFormComponent {
   goTo(i: number) { if (i < this.step()) { this.dir.set(-1); this.step.set(i); } }
   back() { this.dir.set(-1); this.step.update(s => s - 1); }
 
-  submit() {
-    const group = this.form.get(this.cur().group)!;
-    if (group.invalid) { group.markAllAsTouched(); return; }
-    if (!this.isLast()) { this.dir.set(1); this.step.update(s => s + 1); return; }
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.dir.set(-1); this.step.set(this.steps.findIndex(s => this.form.get(s.group)!.invalid));
-      return;
-    }
-    this.loading.set(true);
-    const payload = { ...this.form.getRawValue(), allergies: this.allergies(), conditions: this.conditions() };
-    // TODO: send `payload` to your API, then run the lines below in its success callback
-    setTimeout(() => {
-      console.log('New patient', payload);
-      this.patientId.set('P-' + Math.floor(10000 + Math.random() * 90000));
-      this.loading.set(false);
-      this.done.set(true);
-    }, 1200);
+  /** The form is split into groups (personal, contact, ...). The API model is flat, so join them here. */
+  private toNewPatient(): NewPatient {
+    const { personal, contact, medical, emergency } = this.form.getRawValue();
+    const { consent, ...emergencyFields } = emergency; // consent is checked by the form, not stored here
+    return {
+      ...personal,
+      ...contact,
+      ...medical,
+      ...emergencyFields,
+      allergies: this.allergies(),
+      conditions: this.conditions(),
+    };
   }
+
+  submit() {
+  console.log('1 submit clicked', { step: this.step(), loading: this.loading() });
+  if (this.loading()) return;
+
+  const group = this.form.get(this.cur().group)!;
+  if (group.invalid) {
+    console.log('2 step invalid', group.errors, group.value);
+    Object.entries((group as any).controls).forEach(([k, c]: any) => c.invalid && console.log('  invalid field:', k, c.errors));
+    group.markAllAsTouched(); return;
+  }
+  if (!this.isLast()) { this.dir.set(1); this.step.update(s => s + 1); return; }
+  if (this.form.invalid) {
+    console.log('3 whole form invalid', this.form.errors);
+    this.form.markAllAsTouched();
+    this.dir.set(-1);
+    this.step.set(this.steps.findIndex(s => this.form.get(s.group)!.invalid));
+    return;
+  }
+
+  console.log('4 calling API', this.toNewPatient());
+  this.loading.set(true);
+  this.errorMsg.set(null);
+
+  this.patientService.add$(this.toNewPatient()).subscribe({
+    next: (saved) => { console.log('5 saved', saved); this.patientId.set(saved.id); this.loading.set(false); this.done.set(true); },
+    error: (err: Error) => { console.log('6 failed', err); this.loading.set(false); this.errorMsg.set(err.message); },
+  });
+}
 
   reset() {
     this.form.reset(); this.allergies.set([]); this.conditions.set([]);
+    this.errorMsg.set(null);
     this.step.set(0); this.dir.set(1); this.done.set(false);
   }
 }
